@@ -16,7 +16,8 @@ import threading
 import time
 
 log = logging.getLogger(__name__)
-GRACE_S = 0.02
+GRACE_S = 0.02      # after a request, wait this long for the next one before a preparation step
+BUSY_S = 1.0        # ... while the last request finished less than this ago (otherwise run the step at once)
 
 
 def _filler(tokens):
@@ -113,6 +114,7 @@ class App:
         self.prep_done = 0
         self.engine = None
         self._listeners = []
+        self._last_served = 0.0
         self._worker = threading.Thread(target=self._run, name=f'decider-mlx-{self.model}', daemon=True)
         self._worker.start()
         self._loaded.wait()
@@ -184,6 +186,7 @@ class App:
         except BaseException as e:   # noqa: BLE001 - handed back to the caller
             job.error = e
         finally:
+            self._last_served = time.perf_counter()
             job.done.set()
 
     def _notify(self):
@@ -212,7 +215,7 @@ class App:
             steps = self._prep_steps()
             self._notify()
             while True:
-                self._drain(GRACE_S)
+                self._drain(GRACE_S if time.perf_counter() - self._last_served < BUSY_S else 0)
                 try:
                     name, step = next(steps)
                 except StopIteration:
