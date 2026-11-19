@@ -48,3 +48,15 @@ cases that use these inputs: `features16_{separate,isolated}_{12,13,14,15}`, `im
 `image_string_tail`, `image_two`, `image_raw`, `image_isolated`, `long5k`, `array_mixed10`,
 `array_mixed10_isolated`, `array_mixed10_saved_temperature`, `array_mixed10_raw`, `array_mixed80`. No other line
 changed. The generator is kept with the research records (`R-003`).
+
+## Length error message (both models)
+
+The `LengthError` message ended with the official library's advice to "raise max_length", which users of this
+engine cannot do: the limit is fixed at 32,768 tokens. The official HTTP API documents no message text for this
+case (clients branch on the status and `type`), so the message now states the limit instead. `http.jsonl` of both
+models changed in the two cases that hit it, `too_long` and `too_long_isolated`; status, type, code and param are
+unchanged:
+
+| before | now |
+|---|---|
+| `Question 'a' needs 40075 tokens with the state and images, over the 32768-token limit; shorten the state, lower the image resolution or raise max_length` | `Question 'a' needs 40075 tokens with the state and images, which exceeds the 32,768-token input limit; shorten the state or lower the image resolution` |

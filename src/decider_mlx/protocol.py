@@ -23,7 +23,7 @@ class RequestError(ValueError):
 
 
 class LengthError(ValueError):
-    """A question with the state does not fit in max_length tokens; nothing is truncated (HTTP 400)."""
+    """A question with the state does not fit in the 32,768-token input limit; nothing is truncated (HTTP 400)."""
 
 
 def describe(value):
@@ -165,8 +165,8 @@ class Encoder:
                 if mode == "isolated" and len(part) > 1:
                     mid = len(part) // 2
                     return join(part[:mid]) + join(part[mid:])
-                raise LengthError(f"Question {part[0][0]!r} needs {len(ids)} tokens with the state and images, over the {max_length}-token "
-                                  "limit; shorten the state, lower the image resolution or raise max_length")
+                raise LengthError(f"Question {part[0][0]!r} needs {len(ids)} tokens with the state and images, which exceeds the "
+                                  f"{max_length:,}-token input limit; shorten the state or lower the image resolution")
             return [Encoded(np.asarray(ids, dtype=np.int32), tuple(e[0] for e in part), tuple(e[1] for e in part),
                             (len(context), *(len(e[2]) for e in part)), tuple(marks), pixels, grid,
                             any(e[3] for e in part))]
