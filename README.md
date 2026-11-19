@@ -209,7 +209,8 @@ Measured against BF16 reference outputs of the original models on held-out evalu
 | Locate span sets | 305/314 | 100/114 |
 | BoolQ gate, 4 execution conditions | 100/100 each | 100/100 each |
 
-Per-model details: [docs/models.md](docs/models.md).
+Per-model details: [docs/models.md](docs/models.md). To measure a build against the original model yourself, see
+[bench/quality/](bench/quality/README.md).
 
 ## Development
 
@@ -235,6 +236,7 @@ stand-in for the Hugging Face Hub that serves a folder as a model repository, fo
 
 [experiments/](experiments/README.md) is the research record: what was tried for each model, what was kept or
 dropped and why, with the measurements (weights, INT8 and W4A8 kernels, length buckets, bulk packing, startup).
+[tools/convert/](tools/convert/README.md) builds the published weights from the original BF16 checkpoints.
 
 ## License
 

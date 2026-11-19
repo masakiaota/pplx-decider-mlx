@@ -204,7 +204,8 @@ uv run decider-mlx serve --model pplx-decider-v1.3 --port 8001
 | Locate の区間の集合 | 305/314 | 100/114 |
 | BoolQ ゲート、4つの実行条件 | 各 100/100 | 各 100/100 |
 
-モデルごとの詳細は [docs/models.md](docs/models.md) にある。
+モデルごとの詳細は [docs/models.md](docs/models.md) にある。ビルドを元のモデルと比べる手順は
+[bench/quality/](bench/quality/README.md) にある（英語）。
 
 ## 開発
 
@@ -229,6 +230,7 @@ uv run python bench/speed.py --model pplx-decider-flash-v1.3
 
 [experiments/](experiments/README.md) は研究の記録である（英語）。モデルごとに何を試し、何を残し、何をやめたか、
 その理由と測定値を書いてある（重み、INT8・W4A8 カーネル、長さのバケット、まとめ処理、起動）。
+[tools/convert/](tools/convert/README.md) は、公開している重みを元の BF16 チェックポイントから作るスクリプトである（英語）。
 
 ## ライセンス
 
