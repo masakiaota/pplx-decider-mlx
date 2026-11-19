@@ -26,7 +26,6 @@ class ModelSpec:
     long_graph_min: int = 0         # compiled graph for one sequence longer than this (0: any single sequence;
                                     # otherwise only for a single text request)
     image_graphs: bool = False      # image forwards on bucket / per-shape graphs, vision blocks compiled
-    join_image_text_state: bool = False   # HTTP: an array state of image parts + text parts becomes the joined text
     prefetch: bool = False          # read the mapped main weights once in a background thread after loading
     warmup: str = ''                # synthetic startup requests (app.py)
     layout: dict = field(default_factory=dict)  # files in the HF snapshot: main dir, Locate dir, extra weights
@@ -40,7 +39,7 @@ MODELS = {
         hf_revision='TBD-after-upload',     # TODO(stage 4): fill in the commit hash after the upload
         temperature=1.3302962,
         arithmetic='affine-int8', score_layers=tuple(range(16)), delta_threadgroup=(32, 4, 1),
-        bucket_max_chunks=7, batch16=True, long_graph_min=0, image_graphs=True, join_image_text_state=False,
+        bucket_max_chunks=7, batch16=True, long_graph_min=0, image_graphs=True,
         prefetch=True, warmup='flash',
         layout=dict(main='.', locate='locate'),
         recommended_memory_gb=24),
@@ -50,7 +49,7 @@ MODELS = {
         hf_revision='TBD-after-upload',     # TODO(stage 4): fill in the commit hash after the upload
         temperature=1.2263882,
         arithmetic='w4a8-s4', delta_threadgroup=(32, 1, 1),
-        bucket_max_chunks=8, batch16=False, long_graph_min=4096, image_graphs=False, join_image_text_state=True,
+        bucket_max_chunks=8, batch16=False, long_graph_min=4096, image_graphs=False,
         prefetch=False, warmup='27b',
         layout=dict(main='.', locate='locate', rowq4='rowq4', locate_adapter='locate/adapter.safetensors'),
         recommended_memory_gb=36),

@@ -4,7 +4,8 @@ Body: {"model", "state", "questions"[, "mode", "max_staleness"]}; unknown top-le
 served model's official name, and the response "model" is that name. Images are OpenAI-style parts
 {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}} anywhere in `state` (PNG/JPEG/WebP data URLs,
 at most 8); they are taken out of `state` in reading order and placed before the request text (model card). The
-rest of `state` is kept as given (a string is text, an object or array is read as JSON). mode=web_grounding is not
+rest of `state` is kept as sent, as in the official library: a string is text, an object or array (including the
+remaining text parts) is read as JSON. Text parts are not joined. mode=web_grounding is not
 available locally (400).
 
 Local extensions: a JSON array of bodies (a same-order array of responses; an invalid item gets {"error": ...} in its
@@ -133,11 +134,6 @@ def to_request(body, spec):
     state = _extract(body['state'], images)
     if len(images) > MAX_IMAGES:
         raise ApiError(f'At most {MAX_IMAGES} images per question', param='state')
-    if spec.join_image_text_state and images and isinstance(state, list):
-        # 27B: [image, ..., "text" | {"type": "text", "text"}] reads like images=[...] with the joined text as state
-        texts = [p if isinstance(p, str) else p.get('text') if isinstance(p, dict) and p.get('type') == 'text' and set(p) == {'type', 'text'} and isinstance(p.get('text'), str) else None for p in state]
-        if all(t is not None for t in texts):
-            state = '\n'.join(texts)
     request = {'state': state, 'questions': questions}
     if images:
         request['images'] = images
