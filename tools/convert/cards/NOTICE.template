@@ -1,0 +1,13 @@
+{repo}
+
+This repository contains converted weights of {base}
+(https://huggingface.co/{base}, revision {revision}), licensed under the Apache License,
+Version 2.0 (LICENSE). It is an unofficial derivative and is not affiliated with or endorsed by Perplexity AI.
+
+Modifications: the language-model weights were re-quantized and re-encoded for MLX on Apple silicon, and the
+configuration file mlx_config.json and manifest.json were added (see README.md for the conversion). The tokenizer,
+processor and model configuration files are unchanged copies of the original repository.
+
+The NOTICE of the original model follows.
+
+{original}
