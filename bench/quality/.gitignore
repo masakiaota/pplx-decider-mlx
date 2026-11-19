@@ -1,0 +1,3 @@
+# Built evaluation data and run outputs contain dataset text and images: never committed
+data/
+out/

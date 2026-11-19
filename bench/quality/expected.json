@@ -1,0 +1,23 @@
+{
+ "sha256": {
+  "eval/boolq100.jsonl": "f761af15c2ed6a96b77c79c4abfe5f78f00042fbcfc1d0437e726e1dd32f5d18",
+  "eval/features16-separate.jsonl": "337483a7004798b5b6469b684e239ef2dfb35394858645b79b18b09ebb7ec9f6",
+  "eval/features16-isolated.jsonl": "550c30e16de3d0915d874eec5b2056b80295b51484a79b57caabb87e7efecfae",
+  "eval/boolq-val300.jsonl": "fb35e36c930ef5a519536a66a63e4f8b5e3cc1d47911f14d8673ed04a2d0610a",
+  "eval/boolq-choice-score60.jsonl": "c49176efc1ea892520e593a6c7fbae7fd756eb040996f8881154bd6a595d33e4",
+  "eval/squad-locate100.jsonl": "90687ea0427251796cf4ce6aff4bce41eb4712b460f36c70aa0536b87fb63345",
+  "eval/squad-choice60.jsonl": "8e3eea3f33d638fe2c03ec8a23d1f2ef65c1191358a49f362b94a568aee091be",
+  "eval/squad-multi30-isolated.jsonl": "ced28da4423747b87561518d91c3d4f30bfcd0efed0fb5aa80f78ae57b8c7446",
+  "eval/squad-multi30-separate.jsonl": "ce497bcfd3c92f4946f3623cd30df9ab1957554a24c3acb438f743d1ed94b5aa",
+  "eval/squad-locate200b.jsonl": "f9c25b62a1200c32c07e91f6c2070e54de8a0449ab415bf5387d8861d108e880",
+  "eval/qasper-long30.jsonl": "62ebedc6b547894d159e32312d61e49f86b70e295b4fbd2463bb17d89fdfa688",
+  "eval/qasper-long40b.jsonl": "7e9a7e9bdd871d0415115abc4ef853563f941d670fcc2d3f5d34ab8a341345e9",
+  "eval/vqa30.jsonl": "7e02e0e3919a80d7a6ca9135f155068dec4ab82db519046cc5905b8e4d5b3979",
+  "eval/vqa60b.jsonl": "f3d8f40712f22783df8819d86678e58846f900eefaf5e395db73d2e386738790",
+  "calib/calib-boolq-train2000.jsonl": "1367cec6b61825ce2d7636f640d44e0b9d052b2c9f28ea8b9cf18efb4e9f1f24",
+  "calib/calib-squad-train500.jsonl": "1e8f379484b286f67c897b842cada92961aa12c032cbd81226c88737ed0174ec",
+  "calib/calib-squad-locate-train200.jsonl": "ed92e8cfa426227706272748d97307732ce58f4ba355480aea6ca5f26ebf6bb6",
+  "calib/calib-qasper-train20.jsonl": "98565f02293b60e1b5abe2d47c9560acd3d5114c32766f533ef4f87623e9f127",
+  "calib/calib-vqa20.jsonl": "c32b577339b8326d17895236d6cc231988f7a5c4ea90f530bc7e06330043f114"
+ }
+}
