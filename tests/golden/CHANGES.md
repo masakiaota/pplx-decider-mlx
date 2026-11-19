@@ -30,3 +30,21 @@ registry flag is gone. `27b/http.jsonl` was regenerated for the 21 cases whose `
 
 The input token counts of these cases now equal Flash's (for example `image_vqa_0` 458 -> 482), and the answer
 values change accordingly. No other line changed; Flash is unchanged.
+
+## Synthetic images and long text in the HTTP cases (both models)
+
+The shipped tests no longer contain VQAv2 / COCO images or the Qasper paper text. In `http-cases.jsonl` and
+`http-images.json`:
+
+- The 13 COCO photos (`@image:0` to `8`, `10` to `13`) were replaced by generated JPEGs of the same sizes (coloured
+  shapes on a gradient with mild noise), and the VQAv2 questions about them by questions about the new images
+  (same question ids, types and option counts). The noise PNG (`@image:9`) and the two invalid data URLs are
+  unchanged.
+- `long5k`: the Qasper paper text was replaced by a generated station log of the same length (25.2K characters)
+  with a question about it.
+
+This changes the inputs, not the engine. `http.jsonl` of both models was regenerated with the same engine for the 21
+cases that use these inputs: `features16_{separate,isolated}_{12,13,14,15}`, `image_vqa_{0,1,2}`,
+`image_string_tail`, `image_two`, `image_raw`, `image_isolated`, `long5k`, `array_mixed10`,
+`array_mixed10_isolated`, `array_mixed10_saved_temperature`, `array_mixed10_raw`, `array_mixed80`. No other line
+changed. The generator is kept with the research records (`R-003`).
