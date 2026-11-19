@@ -71,6 +71,8 @@ early layers. Locate runs on the standard 8-bit path.
 
 Main weights: 5.74 GB. Locate weights: 3.80 GB. The original repository is about 8.5 GiB of BF16 weights.
 
+The scripts that build these files from the original checkpoint are in [tools/convert](https://github.com/masakiaota/pplx-decider-mlx/tree/main/tools/convert) of decider-mlx.
+
 ## Agreement with the original model
 
 Measured against BF16 reference outputs of the original model (an MLX port that matches the official PyTorch
