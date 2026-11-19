@@ -9,11 +9,10 @@ requires-python = ">=3.14"
 dependencies = [
   "huggingface-hub==1.31.0",
   "mlx==0.32.5",
-  "numpy",
+  "numpy==2.5.5",
   "pillow==12.3.0",
-  "psutil",
-  "safetensors==0.8.0",
-  "transformers==5.17.0",
+  "psutil==7.2.2",
+  "tokenizers==0.23.3",
 ]
 
 [project.scripts]
@@ -34,3 +33,12 @@ mlx = { git = "https://github.com/ml-explore/mlx", rev = "fc344c986c4169d99f76b5
 # PYPI_RELEASE=1: version "0.32.5" (without it MLX names itself 0.32.5.devYYYYMMDD+hash).
 # No MLX_BUILD_FRONTEND/BACKEND_PACKAGE: one "mlx" package that includes libmlx and mlx.metallib.
 mlx = { PYPI_RELEASE = "1" }
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.uv]
+# Precompile .pyc at install (faster first import).
+compile-bytecode = true
