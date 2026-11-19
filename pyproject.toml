@@ -1,0 +1,36 @@
+[project]
+name = "decider-mlx"
+version = "0.1.0.dev0"
+description = "MLX inference engine for Perplexity Decider v1.3 models on Apple silicon Macs"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+dependencies = [
+  "huggingface-hub==1.31.0",
+  "mlx==0.32.5",
+  "numpy",
+  "pillow==12.3.0",
+  "psutil",
+  "safetensors==0.8.0",
+  "transformers==5.17.0",
+]
+
+[project.scripts]
+decider-mlx = "decider_mlx.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+# MLX 0.32.5 is not on PyPI yet. It is built from source at ml-explore/mlx commit fc344c9
+# (version 0.32.5, includes PR #4682). Building needs Xcode with the Metal Toolchain.
+# When mlx==0.32.5 is published on PyPI, remove the [tool.uv.sources] and
+# [tool.uv.extra-build-variables] entries for mlx.
+[tool.uv.sources]
+mlx = { git = "https://github.com/ml-explore/mlx", rev = "fc344c986c4169d99f76b5d95ae6b4a58a359a63" }
+
+[tool.uv.extra-build-variables]
+# PYPI_RELEASE=1: version "0.32.5" (without it MLX names itself 0.32.5.devYYYYMMDD+hash).
+# No MLX_BUILD_FRONTEND/BACKEND_PACKAGE: one "mlx" package that includes libmlx and mlx.metallib.
+mlx = { PYPI_RELEASE = "1" }
