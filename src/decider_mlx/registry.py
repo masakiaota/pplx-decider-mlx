@@ -5,7 +5,6 @@ A model is selected by its official name only. Everything not listed here is sha
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,7 +15,7 @@ DATA = Path(__file__).parent / 'data'
 class ModelSpec:
     name: str                       # official model name: CLI --model, HTTP "model", response "model"
     hf_repo: str                    # converted MLX weights, tokenizer, processor and configs
-    hf_revision: str                # pinned revision (commit) of hf_repo
+    hf_revision: str                # pinned revision of hf_repo: the 40-character commit hash after the upload
     temperature: float              # saved temperature (decision_config.json), used when the request gives none
     arithmetic: str                 # 'affine-int8' (Flash) or 'w4a8-s4' (27B), see model.py
     score_layers: tuple = ()        # layers kept on the standard QMM for score sequences (affine-int8)
@@ -36,7 +35,7 @@ MODELS = {
     'pplx-decider-flash-v1.3': ModelSpec(
         name='pplx-decider-flash-v1.3',
         hf_repo='masakiaota/pplx-decider-flash-v1.3-mlx',
-        hf_revision='TBD-after-upload',     # TODO(stage 4): fill in the commit hash after the upload
+        hf_revision='TBD-after-upload',     # PLACEHOLDER: set to the commit hash of the uploaded repository
         temperature=1.3302962,
         arithmetic='affine-int8', score_layers=tuple(range(16)), delta_threadgroup=(32, 4, 1),
         bucket_max_chunks=7, batch16=True, long_graph_min=0, image_graphs=True,
@@ -46,7 +45,7 @@ MODELS = {
     'pplx-decider-v1.3': ModelSpec(
         name='pplx-decider-v1.3',
         hf_repo='masakiaota/pplx-decider-v1.3-mlx',
-        hf_revision='TBD-after-upload',     # TODO(stage 4): fill in the commit hash after the upload
+        hf_revision='TBD-after-upload',     # PLACEHOLDER: set to the commit hash of the uploaded repository
         temperature=1.2263882,
         arithmetic='w4a8-s4', delta_threadgroup=(32, 1, 1),
         bucket_max_chunks=8, batch16=False, long_graph_min=4096, image_graphs=False,
@@ -90,27 +89,7 @@ def weights_from_snapshot(model, root):
                    locate_adapter=root / lay['locate_adapter'] if 'locate_adapter' in lay else None)
 
 
-# --- internal, development only (removed with stage 4): read the weights from the research workspace -------------
-_DEV_ENV = '_DECIDER_MLX_DEV_WEIGHTS'
-
-
-def _dev_weights(model):
-    root = os.environ.get(_DEV_ENV)
-    if not root:
-        return None
-    root = Path(root)
-    if model == 'pplx-decider-flash-v1.3':
-        return Weights(main=root / 'experiments/flash-shared-q8/001-shared-affine8/weights',
-                       locate=root / 'experiments/day-20261119/flash-default/weights/locate-merged')
-    pack = root / 'experiments/night-20261119/B-002-no-groupq4/pack'
-    return Weights(main=pack, locate=pack / 'locate-span', rowq4=root / 'experiments/night-20261119/E-004-w4a8-s4/rowq4-s4-d002',
-                   locate_adapter=root / 'experiments/day-20261119/27b-default/weights/locate-adapter-bf16.safetensors')
-
-
 def resolve_weights(model, fetch=True):
     """Local weight paths for `model`: the pinned Hugging Face snapshot (fetched when missing and fetch is true)."""
-    dev = _dev_weights(model)
-    if dev is not None:
-        return dev
     from . import fetch as fetching
     return weights_from_snapshot(model, fetching.snapshot(model, download=fetch))

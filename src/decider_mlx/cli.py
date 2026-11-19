@@ -51,8 +51,15 @@ def _model(value):
         raise argparse.ArgumentTypeError(str(e))
 
 
+def _ensure(model):
+    """Download the weights first when they are not in the Hugging Face cache (with the download screen)."""
+    from .fetch import Screen, snapshot
+    snapshot(model, screen=Screen())
+
+
 def cmd_serve(a):
     from .server.http import serve
+    _ensure(a.model)
     status = Status()
     status(f'{a.model}: loading weights')
     serve(a.model, a.port, on_progress=_progress(status, True),
@@ -69,6 +76,7 @@ def cmd_run(a):
         o = (line.get('options') or {}) if wrapped else {}
         records.append(dict(id=line.get('id', i) if wrapped else i, request=line['request'] if wrapped else line,
                             mode=o.get('execution_mode', 'separate'), temperature=o.get('temperature'), raw=bool(o.get('raw', False))))
+    _ensure(a.model)
     status = Status()
     status(f'{a.model}: loading weights')
     app = load(a.model)
@@ -93,13 +101,8 @@ def cmd_run(a):
 
 
 def cmd_fetch(a):
-    from .fetch import FetchError, fetch
-    try:
-        path = fetch(a.model)
-    except FetchError as e:
-        print(f'decider-mlx: {e}', file=sys.stderr)
-        return 1
-    print(path)
+    from .fetch import Screen, fetch
+    print(fetch(a.model, screen=Screen()))
     return 0
 
 
@@ -118,12 +121,16 @@ def main(argv=None):
                    help='one request per line, or {"id", "request", "options": {"execution_mode", "temperature", "raw"}}')
     r.add_argument('--output', type=Path, help='output JSONL: {"id", "index", "response" | "error"} per line (default stdout)')
     r.set_defaults(fn=cmd_run)
-    f = sub.add_parser('fetch', help='download the converted weights from Hugging Face (pinned revision)')
+    f = sub.add_parser('fetch', help='download the converted weights from Hugging Face (pinned revision) and check them')
     f.add_argument('--model', required=True, type=_model, help=names)
     f.set_defaults(fn=cmd_fetch)
     a = p.parse_args(argv)
+    from .fetch import FetchError
     try:
         return a.fn(a)
+    except FetchError as e:
+        print(f'decider-mlx: {e}', file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130
 

@@ -1,5 +1,6 @@
-"""Tests that need a model run only when its weights are available: set DECIDER_MLX_TEST_MODELS to a comma-separated
-list of model names (the weights must be in the Hugging Face cache or fetchable). Without it they are skipped."""
+"""Tests that need a model run only when DECIDER_MLX_TEST_MODELS is set to a comma-separated list of model names.
+Their weights come from the Hugging Face cache like any other use (decider-mlx fetch first, or set HF_HUB_CACHE to a
+cache that holds them; HF_HUB_OFFLINE=1 keeps the tests off the network). Without it they are skipped."""
 import os
 
 import pytest

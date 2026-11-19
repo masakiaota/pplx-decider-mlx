@@ -115,10 +115,6 @@ def test_cli_rejects_aliases(capsys):
     assert 'Unknown model' in capsys.readouterr().err
 
 
-def test_dev_override_is_internal():
-    assert registry._DEV_ENV.startswith('_')
-
-
 def test_app_threads(app, model):
     """decide() from several threads is served in order by the one worker; wait_ready() returns True."""
     req = {'state': S, 'questions': Q}
