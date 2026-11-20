@@ -145,8 +145,7 @@ def fetch(model, screen=None, verify=True):
                 done.set()
         log.info('%s: downloading %d files (%.1f GB) from %s@%s', model, len(todo), total / 1e9, s.hf_repo, s.hf_revision)
         threading.Thread(target=run, name='decider-mlx-fetch', daemon=True).start()
-        progress = Progress(total)
-        progress.update(max(0, _blob_bytes(blobs) - stale))
+        progress = Progress(total, start=_blob_bytes(blobs) - stale)
         if screen is not None:
             screen.download(model, progress)          # the first tip at once
         last_log = time.monotonic()
@@ -221,9 +220,11 @@ def verify_files(model, root, manifest=None, screen=None):
 class Progress:
     """Bytes done of a total, with a smoothed rate and the remaining time."""
 
-    def __init__(self, total):
-        self.total, self.done, self.t0 = max(1, total), 0, time.monotonic()
-        self._samples = [(self.t0, 0)]
+    def __init__(self, total, start=0):
+        """`start`: bytes already on disk before the download (not counted in the rate or the downloaded size)."""
+        self.total, self.t0 = max(1, total), time.monotonic()
+        self.start = self.done = min(self.total, max(0, start))
+        self._samples = [(self.t0, self.done)]
 
     def update(self, done):
         now = time.monotonic()
@@ -299,7 +300,8 @@ class Screen:
     def download(self, model, progress, final=False):
         head = f'Downloading {model}  {progress.bar()}  {progress.text()}'
         if final:
-            head = f'Downloaded {model}: {progress.total / 1e9:.1f} GB in {_duration(time.monotonic() - progress.t0)}'
+            got = (progress.total - progress.start) / 1e9
+            head = f'Downloaded {model}: {got:.1f} GB in {_duration(time.monotonic() - progress.t0)}'
         if self.tty:
             block, _ = self._block(head, model)
             self._draw([head] if final else block)

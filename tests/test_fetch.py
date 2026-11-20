@@ -12,7 +12,7 @@ import pytest
 
 from decider_mlx import fetch, registry, tips
 
-from hub_mock import start
+from hub_mock import commit_of as hub_commit, start
 
 FLASH = 'pplx-decider-flash-v1.3'
 REPO = 'masakiaota/pplx-decider-flash-v1.3-mlx'
@@ -61,7 +61,8 @@ def test_fetch_verify_and_reuse(hub):
     assert 'Downloaded pplx-decider-flash-v1.3' in r.stderr and 'Tip 1/' in r.stderr and 'Verified 4 files' in r.stderr
     assert f'uv run decider-mlx serve --model {FLASH} --port 8000' in r.stderr
     assert (root / 'weights.safetensors').read_bytes() == (tmp / 'repo/weights.safetensors').read_bytes()
-    assert root.name == server.repos[REPO].commit               # the snapshot of the resolved commit
+    pinned = registry.spec(FLASH).hf_revision
+    assert root.name == hub_commit(server.repos[REPO], pinned)   # the snapshot of the resolved commit
     server.shutdown()                                            # no network from here on
     offline = env | {'HF_HUB_OFFLINE': '1'}
     r = python(offline, f'from decider_mlx import fetch; print(fetch.snapshot({FLASH!r}, download=False))')
@@ -117,6 +118,8 @@ def test_progress_text():
     p = fetch.Progress(10 * 10**9)
     p.update(2.5 * 10**9)
     assert re.search(r'2\.5 / 10\.0 GB\s+25%', p.text()) and p.bar(10) == '[##........]'
+    seeded = fetch.Progress(10 * 10**9, start=9 * 10**9)    # blobs already on disk are not part of the rate
+    assert seeded.done == seeded.start == 9 * 10**9 and seeded.rate == 0.0
     assert fetch._duration(3725) == '1h02m' and fetch._duration(65) == '1m05s' and fetch._duration(9) == '9s'
 
 

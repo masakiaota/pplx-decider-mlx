@@ -35,7 +35,7 @@ MODELS = {
     'pplx-decider-flash-v1.3': ModelSpec(
         name='pplx-decider-flash-v1.3',
         hf_repo='masakiaota/pplx-decider-flash-v1.3-mlx',
-        hf_revision='TBD-after-upload',     # PLACEHOLDER: set to the commit hash of the uploaded repository
+        hf_revision='1fbb868cc9fa26927fa9a33961827ec2eb669947',
         temperature=1.3302962,
         arithmetic='affine-int8', score_layers=tuple(range(16)), delta_threadgroup=(32, 4, 1),
         bucket_max_chunks=7, batch16=True, long_graph_min=0, image_graphs=True,

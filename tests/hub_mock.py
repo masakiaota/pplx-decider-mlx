@@ -6,7 +6,8 @@ repository (test_fetch.py); it can also serve a full upload folder for an end-to
     python tests/hub_mock.py --port 8765 --repo masakiaota/pplx-decider-flash-v1.3-mlx=/path/to/folder [--rate-mb 500]
     HF_ENDPOINT=http://127.0.0.1:8765 HF_HUB_CACHE=/tmp/cache decider-mlx fetch --model pplx-decider-flash-v1.3
 
-Any revision name resolves to the folder's commit (sha1 of its file list). Files of 10 MiB or more, and every
+Any revision name resolves to the folder's commit (sha1 of its file list), except a full 40-hex commit hash, which
+resolves to itself as on the real Hub. Files of 10 MiB or more, and every
 .safetensors file, are served as LFS files whose ETag is their sha256 (taken from manifest.json when present).
 """
 from __future__ import annotations
@@ -110,7 +111,7 @@ def make_server(repos, port=0, rate=None):
                 repo = repos.get(m[1])
                 if repo is None:
                     return self._missing('RepoNotFound')
-                return self._json({'id': m[1], 'sha': repo.commit, 'private': False,
+                return self._json({'id': m[1], 'sha': commit_of(repo, m[2]), 'private': False,
                                    'siblings': [{'rfilename': f} for f in repo.files]})
             m = re.fullmatch(r'/api/models/([^/]+/[^/]+)/tree/([^/]+)(/.*)?', path)
             if m:
@@ -126,10 +127,10 @@ def make_server(repos, port=0, rate=None):
                 f = repo.files.get(m[3])
                 if f is None:
                     return self._missing('EntryNotFound')
-                return self._file(repo, f)
+                return self._file(repo, f, commit_of(repo, m[2]))
             self._missing('EntryNotFound')
 
-        def _file(self, repo, f):
+        def _file(self, repo, f, commit):
             start, end = 0, f['size'] - 1
             rng = self.headers.get('Range')
             m = re.fullmatch(r'bytes=(\d+)-(\d*)', rng or '')
@@ -137,7 +138,7 @@ def make_server(repos, port=0, rate=None):
             if m and self.command == 'GET':
                 start = int(m[1]); end = int(m[2]) if m[2] else end
                 self.send_header('Content-Range', f'bytes {start}-{end}/{f["size"]}')
-            self.send_header('X-Repo-Commit', repo.commit)
+            self.send_header('X-Repo-Commit', commit)
             self.send_header('ETag', f'"{f["etag"]}"')
             if f['lfs']:
                 self.send_header('X-Linked-Etag', f'"{f["etag"]}"')
@@ -166,6 +167,11 @@ def make_server(repos, port=0, rate=None):
     server.daemon_threads = True
     server.repos, server.stats = repos, stats
     return server
+
+
+def commit_of(repo, revision):
+    """The commit a revision name resolves to: a full commit hash is itself, any other name the folder's commit."""
+    return revision if re.fullmatch('[0-9a-f]{40}', revision) else repo.commit
 
 
 def start(repos, rate=None):
