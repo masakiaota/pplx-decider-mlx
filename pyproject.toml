@@ -5,10 +5,11 @@ description = "MLX inference engine for Perplexity Decider v1.3 models on Apple 
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
   "huggingface-hub==1.31.0",
   "mlx==0.32.5",
+  "mlx-metal==0.32.5",
   "numpy==2.5.5",
   "pillow==12.3.0",
   "psutil==7.2.2",
@@ -22,17 +23,14 @@ decider-mlx = "decider_mlx.cli:main"
 requires = ["uv_build>=0.13.5,<0.14"]
 build-backend = "uv_build"
 
-# MLX 0.32.5 is not on PyPI yet. It is built from source at ml-explore/mlx commit fc344c9
-# (version 0.32.5, includes PR #4682). Building needs Xcode with the Metal Toolchain.
-# When mlx==0.32.5 is published on PyPI, remove the [tool.uv.sources] and
-# [tool.uv.extra-build-variables] entries for mlx.
+# MLX 0.32.5 is not on PyPI yet. decider-mlx uses the wheels that MLX's own CI built at ml-explore/mlx commit
+# fc344c9 (version 0.32.5, includes PR #4682; nightly run 44033175204). CI artifacts expire, so the two unmodified
+# wheels are re-hosted on this repository's GitHub Release "mlx-0.32.5-fc344c9"; uv.lock pins their sha256.
+# They are faster than a local source build (Flash 5-7% at 12.9K tokens; otherwise within 1%) because the
+# built-in Metal kernels are compiled with MLX's CI toolchain. When mlx==0.32.5 is on PyPI, remove [tool.uv.sources] and relock.
 [tool.uv.sources]
-mlx = { git = "https://github.com/ml-explore/mlx", rev = "fc344c986c4169d99f76b5d95ae6b4a58a359a63" }
-
-[tool.uv.extra-build-variables]
-# PYPI_RELEASE=1: version "0.32.5" (without it MLX names itself 0.32.5.devYYYYMMDD+hash).
-# No MLX_BUILD_FRONTEND/BACKEND_PACKAGE: one "mlx" package that includes libmlx and mlx.metallib.
-mlx = { PYPI_RELEASE = "1" }
+mlx = { url = "https://github.com/masakiaota/pplx-decider-mlx/releases/download/mlx-0.32.5-fc344c9/mlx-0.32.5-cp314-cp314-macosx_27_0_arm64.whl" }
+mlx-metal = { url = "https://github.com/masakiaota/pplx-decider-mlx/releases/download/mlx-0.32.5-fc344c9/mlx_metal-0.32.5-py3-none-macosx_27_0_arm64.whl" }
 
 [dependency-groups]
 dev = [

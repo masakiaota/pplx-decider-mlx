@@ -35,9 +35,7 @@ Flash is about 2x the official Mac app (Flash v1.2, q8_0 GGUF) on the same HTTP 
 - A Mac with an **M5 chip or later**. The kernels and the length tables were tuned and tested on M5; earlier chips
   are not supported.
 - Memory: 24 GB or more for Flash, 36 GB or more for 27B. Running both at once needs the sum.
-- macOS with **Xcode and the Metal Toolchain**: MLX 0.32.5 is built from source during installation (see below).
-  `xcodebuild -showComponent MetalToolchain` should report `installed`; if not, run
-  `xcodebuild -downloadComponent MetalToolchain`.
+- macOS 27 or later (the MLX wheels below target macOS 27.0).
 - [uv](https://docs.astral.sh/uv/) (it installs Python 3.14 when needed).
 - Disk: 9.6 GB (Flash) or 16.7 GB (27B) in the Hugging Face cache.
 
@@ -49,10 +47,15 @@ cd pplx-decider-mlx
 uv sync
 ```
 
-`uv sync` builds MLX 0.32.5 from source at ml-explore/mlx commit `fc344c9`, pinned in `pyproject.toml`. That
+`uv sync` installs MLX 0.32.5 from the wheels that MLX's own CI built at ml-explore/mlx commit `fc344c9`. That
 version includes [ml-explore/mlx#4682](https://github.com/ml-explore/mlx/pull/4682) (faster quantized matrix
-products on M5) and is not on PyPI yet. The first build takes about 2 minutes and needs network access; later syncs
-reuse uv's cache. When `mlx==0.32.5` is published on PyPI, this project will switch to it.
+products on M5) and is not on PyPI yet. CI artifacts expire, so the two unmodified wheels (`mlx`, `mlx-metal`, MIT
+License) are re-hosted on this repository's
+[`mlx-0.32.5-fc344c9` release](https://github.com/masakiaota/pplx-decider-mlx/releases/tag/mlx-0.32.5-fc344c9), and
+`uv.lock` pins their sha256. A local source build gives the same outputs but runs Flash 5-7% slower on 12.9K-token
+inputs (other shapes and 27B within 1%), because MLX's built-in Metal kernels come out differently with another
+Xcode. When `mlx==0.32.5` is
+published on PyPI, this project will switch to it.
 
 Commands below use `uv run decider-mlx`; `source .venv/bin/activate` lets you type `decider-mlx` directly.
 

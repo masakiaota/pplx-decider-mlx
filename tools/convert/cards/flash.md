@@ -27,8 +27,7 @@ loader will not reproduce the model. decider-mlx does not run the official BF16 
 
 ## Usage
 
-Requirements: a Mac with an M5 chip or later, 24 GB of memory or more recommended, macOS with Xcode and the Metal
-Toolchain (decider-mlx builds MLX 0.32.5 from source), Python 3.14 and [uv](https://docs.astral.sh/uv/).
+Requirements: a Mac with an M5 chip or later, 24 GB of memory or more recommended, macOS 27 or later, Python 3.14 and [uv](https://docs.astral.sh/uv/).
 
 ```sh
 git clone https://github.com/masakiaota/pplx-decider-mlx && cd pplx-decider-mlx

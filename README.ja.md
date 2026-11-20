@@ -33,9 +33,7 @@ Flash は、同じ HTTP の負荷で公式 Mac アプリ（Flash v1.2、q8_0 GGU
 
 - **M5 以降**のチップを積んだ Mac。カーネルと長さの表は M5 で調整し、M5 で試験した。それより前のチップは対象外である。
 - メモリ：Flash は 24 GB 以上、27B は 36 GB 以上。2つを同時に動かすなら合計が要る。
-- **Xcode と Metal Toolchain** の入った macOS。インストールの途中で MLX 0.32.5 をソースからビルドする（下記）。
-  `xcodebuild -showComponent MetalToolchain` が `installed` を返すこと。返さなければ
-  `xcodebuild -downloadComponent MetalToolchain` を実行する。
+- macOS 27 以降（下記の MLX の wheel が macOS 27.0 向けである）。
 - [uv](https://docs.astral.sh/uv/)（必要なら Python 3.14 も uv が入れる）。
 - ディスク：Hugging Face のキャッシュに 9.6 GB（Flash）または 16.7 GB（27B）。
 
@@ -47,10 +45,13 @@ cd pplx-decider-mlx
 uv sync
 ```
 
-`uv sync` は MLX 0.32.5 を ml-explore/mlx の commit `fc344c9`（`pyproject.toml` で固定）からビルドする。この版には
+`uv sync` は MLX 0.32.5 を、MLX 自身の CI が ml-explore/mlx の commit `fc344c9` で作った wheel から入れる。この版には
 [ml-explore/mlx#4682](https://github.com/ml-explore/mlx/pull/4682)（M5 での量子化行列積の高速化）が入っているが、
-まだ PyPI にない。最初のビルドは約2分かかり、ネットワークが要る。2回目以降は uv のキャッシュを使う。
-`mlx==0.32.5` が PyPI に出たら、そちらに切り替える。
+まだ PyPI にない。CI の成果物は期限で消えるため、手を加えていない2つの wheel（`mlx`、`mlx-metal`、MIT License）を
+このリポジトリの [`mlx-0.32.5-fc344c9` リリース](https://github.com/masakiaota/pplx-decider-mlx/releases/tag/mlx-0.32.5-fc344c9)
+に置き直し、`uv.lock` で sha256 を固定している。手元でソースからビルドしても出力は同じだが、Flash の 12.9K トークンの入力で
+5〜7%遅い（他の形と 27B は1%以内）。Xcode が違うと、MLX の組み込み Metal カーネルの出来が変わるためである。`mlx==0.32.5` が PyPI に出たら、
+そちらに切り替える。
 
 以下では `uv run decider-mlx` と書く。`source .venv/bin/activate` の後なら `decider-mlx` だけでよい。
 
