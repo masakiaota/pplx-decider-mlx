@@ -260,10 +260,13 @@ def _duration(s):
 
 class Screen:
     """The download screen on stderr: one progress line and a tip that changes every `every` seconds. On a terminal
-    the block is redrawn in place; otherwise a progress line is written every 10 s and each tip once."""
+    the block is redrawn in place; otherwise a progress line is written every 10 s and each tip once. The tips are in
+    Japanese or English (tips.language())."""
 
-    def __init__(self, stream=None, every=8.0, width=100):
+    def __init__(self, stream=None, every=8.0, width=100, lang=None):
+        from .tips import language
         self.stream = stream or sys.stderr
+        self.lang = lang or language()
         self.tty = self.stream.isatty()
         self.every, self.width = every, width
         self.t0 = time.monotonic()
@@ -274,11 +277,12 @@ class Screen:
     def _tip_index(self):
         return int((time.monotonic() - self.t0) // self.every)
 
-    def _block(self, head):
-        from .tips import TIPS, tip
+    def _block(self, head, model):
+        from .tips import LABEL, count, tip
         i = self._tip_index()
-        title, lines = tip(i)
-        out = [head, '', f'  Tip {i % len(TIPS) + 1}/{len(TIPS)}: {title}']
+        title, lines = tip(i, model, self.lang)
+        n = count(self.lang)
+        out = [head, '', f'  {LABEL[self.lang]} {i % n + 1}/{n}: {title}']
         out += ['    ' + line for line in lines]
         return out, i
 
@@ -297,13 +301,13 @@ class Screen:
         if final:
             head = f'Downloaded {model}: {progress.total / 1e9:.1f} GB in {_duration(time.monotonic() - progress.t0)}'
         if self.tty:
-            block, _ = self._block(head)
+            block, _ = self._block(head, model)
             self._draw([head] if final else block)
             if final:
                 self.lines = 0
             return
         now = time.monotonic()
-        block, i = self._block(head)
+        block, i = self._block(head, model)
         if i != self.tip_shown and not final:
             self.tip_shown = i
             self.stream.write('\n'.join(block[2:]) + '\n')
@@ -321,6 +325,12 @@ class Screen:
         elif final or time.monotonic() - self.last_plain >= 10:
             self.last_plain = time.monotonic()
             self.stream.write(line + '\n')
+        self.stream.flush()
+
+    def next_steps(self, model):
+        """The command to run next, shown once when `decider-mlx fetch` is done."""
+        from .tips import next_steps
+        self.stream.write('\n' + '\n'.join(next_steps(model, self.lang)) + '\n')
         self.stream.flush()
 
     def close(self):

@@ -102,7 +102,9 @@ def cmd_run(a):
 
 def cmd_fetch(a):
     from .fetch import Screen, fetch
-    print(fetch(a.model, screen=Screen()))
+    screen = Screen()
+    print(fetch(a.model, screen=screen))
+    screen.next_steps(a.model)
     return 0
 
 

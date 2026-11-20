@@ -2,91 +2,56 @@
 
 [English](README.md) | 日本語
 
-Perplexity の分類モデル Decider v1.3 を Apple silicon の Mac で速く動かす推論エンジンである。
-[MLX](https://github.com/ml-explore/mlx) の上に作った。公式 Decisions API と同じ本文を HTTP で受け付け、JSONL
-ファイルを処理し、Python からも使える。
+**decider-mlx** は、Perplexity の分類モデル **Decider v1.3（Flash / 27B）** を Apple Silicon（M5 以降）の Mac でローカル実行するための、[MLX](https://github.com/ml-explore/mlx) ベースの推論エンジンです。公式 [Decisions API](https://docs.perplexity.ai/api-reference/decisions-post) 互換の HTTP サーバーに加え、JSONL 一括処理と Python API を提供しており、既存コードの接続先を手元の Mac に向けるだけで利用できます。
 
-| モデル（`--model`） | 元のモデル | このエンジン用の重み | 推奨メモリ |
-|---|---|---|---|
-| `pplx-decider-flash-v1.3` | [perplexity-ai/pplx-decider-flash-v1.3](https://huggingface.co/perplexity-ai/pplx-decider-flash-v1.3) | [masakiaota/pplx-decider-flash-v1.3-mlx](https://huggingface.co/masakiaota/pplx-decider-flash-v1.3-mlx)（8-bit、9.6 GB） | 24 GB 以上 |
-| `pplx-decider-v1.3`（27B） | [perplexity-ai/pplx-decider-v1.3](https://huggingface.co/perplexity-ai/pplx-decider-v1.3) | [masakiaota/pplx-decider-v1.3-mlx](https://huggingface.co/masakiaota/pplx-decider-v1.3-mlx)（4-bit、16.7 GB） | 36 GB 以上 |
+- **公式 Mac アプリの約 2 倍の速度**：Flash モデルでは、公式 Mac アプリの約 2 倍の速度で応答します。さらに、本エンジン独自の配列バッチ送信を使うと、約 3.9 倍まで高速化されます。
+- **27B モデルとローカル拡張に対応**：公式 Mac アプリにはない **27B モデル**も、元の BF16 の半分以下のメモリで動かせます。公式 API にない該当箇所抽出（Locate）や `isolated` モードも利用できます。
+- **元のモデルに近い出力精度**：独自の INT8 と W4A8 の Metal カーネルで高速化しつつ、ホールドアウト評価で元の BF16 モデルとの高い一致率を確認しています。
 
-**非公式のプロジェクトである。Perplexity AI とは関係がなく、Perplexity AI の承認や支援も受けていない。**
-このエンジンは変換した重み（Flash は 8-bit、27B は行ごとの 4-bit）を独自の INT8・W4A8 Metal カーネルで動かす。
-公式の BF16 重みは動かせない。確率は元のモデルとわずかに異なる（[品質](#品質)を参照）。
+> [!NOTE]
+> 本プロジェクトは非公式であり、Perplexity AI とは関係がなく、同社の承認や支援も受けていません。変換済みの重み（Flash は 8-bit、27B は行単位 4-bit）を使用する設計のため公式の BF16 重みはそのまま使用できず、出力確率は元のモデルとわずかに異なります（詳細は[品質](#品質)をご覧ください）。
 
-Mac Studio（M5 Ultra）での値：
+## 公式 Mac アプリとの比較
 
-| | Flash | 27B |
-|---|---:|---:|
-| プロセス起動から受付開始まで | 0.4〜0.5 s | 0.3〜0.5 s |
-| プロセス起動から最初の回答まで | 0.5 s | 0.6〜1.0 s |
-| 1要求（427 トークン） | 43 ms | 220 ms |
-| 20要求を1つの配列で | 0.31 s | 1.92 s |
-| 長い入力（32.4K トークン） | 7.0 s | 22.9 s |
-| 混在した 1,072 要求を配列で | 47 s | 236 s |
-| MLX のピークメモリ（HTTP ベンチマーク後） | 14.2 GB | 23.7 GB |
+Flash モデルについて、同じ HTTP 負荷での処理時間を公式 Mac アプリと比較した結果です。
 
-Flash は、同じ HTTP の負荷で公式 Mac アプリ（Flash v1.2、q8_0 GGUF）の約2倍の速さである。
+| 処理内容（Flash、HTTP） | 公式 Mac アプリ | decider-mlx | 速度比 |
+|---|---:|---:|---:|
+| 1 件（427 トークン） | 88.7 ms | 44.8 ms | 2.0 倍 |
+| 20 件を 1 件ずつ送信 | 1.21 s | 0.58 s | 2.1 倍 |
+| 20 件を 4 並列で送信 | 1.19 s | 0.55 s | 2.2 倍 |
+| 長文入力（5.4K トークン） | 0.96 s | 0.42 s | 2.3 倍 |
+| 20 件を 1 つの配列で一括送信 | 非対応 | 0.31 s ※ | 3.9 倍（1 件ずつ比） |
 
-## 必要なもの
+- 測定環境：Mac Studio（M5 Ultra）。新しく起動したサーバーに対して同一のリクエストを送信して計測しています。
+- 公式 Mac アプリが配信しているモデルは Flash v1.2（`q8_0` GGUF）、`decider-mlx` が動かすモデルは v1.3 です。※印の値は公開パッケージで別途計測した数値です。
+- 起動も軽量化しており、プロセス起動から約 0.5 秒で最初のリクエストに回答できます。公式アプリは 2.2 秒かかります。
 
-- **M5 以降**のチップを積んだ Mac。カーネルと長さの表は M5 で調整し、M5 で試験した。それより前のチップは対象外である。
-- メモリ：Flash は 24 GB 以上、27B は 36 GB 以上。2つを同時に動かすなら合計が要る。
-- macOS 27 以降（下記の MLX の wheel が macOS 27.0 向けである）。
-- [uv](https://docs.astral.sh/uv/)（必要なら Python 3.14 も uv が入れる）。
-- ディスク：Hugging Face のキャッシュに 9.6 GB（Flash）または 16.7 GB（27B）。
+## クイックスタート
 
-## インストール
+### 動作環境
+
+- **チップ**：Apple Silicon **M5 以降**（M4 以前でも動作する可能性がありますが、サポート外）
+- **OS**：macOS 27 以降
+- **推奨メモリ**：24 GB 以上（Flash）／ 36 GB 以上（27B）
+- **ディスク空き容量**：9.6 GB 以上（Flash）／ 16.7 GB 以上（27B）
+- **ツール**：[uv](https://docs.astral.sh/uv/)
+
+### インストールとサーバー起動
 
 ```sh
 git clone https://github.com/masakiaota/pplx-decider-mlx
 cd pplx-decider-mlx
 uv sync
-```
-
-`uv sync` は MLX 0.32.5 を、MLX 自身の CI が ml-explore/mlx の commit `fc344c9` で作った wheel から入れる。この版には
-[ml-explore/mlx#4682](https://github.com/ml-explore/mlx/pull/4682)（M5 での量子化行列積の高速化）が入っているが、
-まだ PyPI にない。CI の成果物は期限で消えるため、手を加えていない2つの wheel（`mlx`、`mlx-metal`、MIT License）を
-このリポジトリの [`mlx-0.32.5-fc344c9` リリース](https://github.com/masakiaota/pplx-decider-mlx/releases/tag/mlx-0.32.5-fc344c9)
-に置き直し、`uv.lock` で sha256 を固定している。手元でソースからビルドしても出力は同じだが、Flash の 12.9K トークンの入力で
-5〜7%遅い（他の形と 27B は1%以内）。Xcode が違うと、MLX の組み込み Metal カーネルの出来が変わるためである。`mlx==0.32.5` が PyPI に出たら、
-そちらに切り替える。
-
-以下では `uv run decider-mlx` と書く。`source .venv/bin/activate` の後なら `decider-mlx` だけでよい。
-
-## 重みのダウンロード
-
-```sh
-uv run decider-mlx fetch --model pplx-decider-flash-v1.3
-uv run decider-mlx fetch --model pplx-decider-v1.3
-```
-
-`fetch` は、変換済みの重み・tokenizer・processor・設定ファイルを、モデルごとの Hugging Face リポジトリから、この
-パッケージに固定した revision で取得する。置き場は Hugging Face の標準キャッシュ（`~/.cache/huggingface`、または
-`HF_HUB_CACHE`・`HF_HOME`）である。進み具合と残り時間を表示し、待っている間は使い方のヒントを順に見せる。取得後に
-リポジトリの `manifest.json` と全ファイルの sha256 を照合する。もう一度実行すれば、いつでも照合し直せる。
-
-`serve`・`run`・`load()` は、重みが無ければ自動で取得する。したがってこの手順は省いてもよい。`HF_HUB_OFFLINE=1`
-のときは何もダウンロードせず、キャッシュをそのまま使う。
-
-## サーバー
-
-```sh
+uv run decider-mlx fetch --model pplx-decider-flash-v1.3   # 重み（9.6 GB）をダウンロード
 uv run decider-mlx serve --model pplx-decider-flash-v1.3 --port 8000
 ```
 
-サーバーはすぐに `127.0.0.1` で待ち受け、重みを読み込む（約0.5秒）までは `503`（`Retry-After: 1`）を返す。その後、
-よく来る形の要求のグラフを、要求の合間に裏で準備する。状態は1行で表示する（例：
-`pplx-decider-flash-v1.3: preparing 41/101 (accepting requests)`）。準備の間も要求に答え、答えは準備の有無に
-左右されない。`GET /metrics` は状態とメモリ使用量を返す。
+> `uv sync` は PyPI 未公開の MLX 0.32.5 を本リポジトリの [GitHub Release](https://github.com/masakiaota/pplx-decider-mlx/releases/tag/mlx-0.32.5-fc344c9) から取得するため、初回は少し時間がかかることがあります（詳細は [CONTRIBUTING.md](CONTRIBUTING.md)）。
 
-選べるのはモデルとポートだけである。メモリの上限や事前チェックは無く、MLX の既定に従う。
+### 最初のリクエストを送る
 
-## HTTP
-
-本文は公式 [Decisions API](https://docs.perplexity.ai/api-reference/decisions-post) と同じである。`model` には
-そのサーバーが動かしているモデルの名前を書く。
+別の端末から HTTP リクエストを送信します。
 
 ```sh
 curl -s localhost:8000/v1/decisions -H 'Content-Type: application/json' -d '{
@@ -101,6 +66,8 @@ curl -s localhost:8000/v1/decisions -H 'Content-Type: application/json' -d '{
   }}'
 ```
 
+レスポンス例（数値は丸めています）：
+
 ```json
 {"model": "pplx-decider-flash-v1.3",
  "answers": {"team": {"type": "choice", "probabilities": {"billing": 0.0004, "support": 0.9992, "sales": 0.0004},
@@ -112,130 +79,82 @@ curl -s localhost:8000/v1/decisions -H 'Content-Type: application/json' -d '{
  "usage": {"input_tokens": 288, "output_tokens": 0, "sequences": 3}}
 ```
 
-（数値はここでは丸めてある。）エラーは公式と同じ形 `{"error": {"message", "type", "code", "param"}}` で返す。不正な要求は
-400、ほかのパスやメソッドは 404・405、32 MiB を超える本文は 413、内部の失敗は 500 である。動かしているモデル以外の
-名前（`-latest` や `perplexity/` 付きを含む）は 400 になる。
+Decider は、テキストや画像（`state`）に対する質問から、問い合わせの振り分け、緊急度の判定、文書の分類などの結果を確率やスコアで得るモデルです。基本となる質問の型は次の 3 種類です（このほかローカル拡張の `locate` が利用できます）。
 
-画像は OpenAI 形式の部品として `state` のどこに置いてもよい。公式ライブラリと同じく、画像は文章の前に置かれる：
+- **`choice`**：選択肢ごとの確率と、最も確率の高い選択肢を返します。
+- **`noul`**：「はい（true）」の確率を返します。
+- **`score`**：段階ごとの確率と、段階の期待値を返します。
 
-```json
-{"model": "pplx-decider-flash-v1.3",
- "state": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0..."}},
-           {"type": "text", "text": "Customer photo of the damaged parcel."}],
- "questions": {"damaged": {"type": "noul", "instructions": "Is the parcel visibly damaged?"}}}
-```
+## モデルと性能
 
-PNG・JPEG・WebP の data URL を、1要求に8枚まで送れる。画像を抜いた残りの `state` は送られたとおりに読む。文字列は
-そのまま文章として、オブジェクトや配列は JSON として読む。
+用途や搭載メモリに応じて 2 つのモデルを利用できます。軽快な応答や高いスループットを優先する場合は **Flash**、27B クラスの表現力が必要なタスクには **27B** をお選びください。
 
-## ローカル拡張
+| 項目 | Flash | 27B |
+|---|---|---|
+| `--model` 指定名 | `pplx-decider-flash-v1.3` | `pplx-decider-v1.3` |
+| 元のモデル | [perplexity-ai/pplx-decider-flash-v1.3](https://huggingface.co/perplexity-ai/pplx-decider-flash-v1.3) | [perplexity-ai/pplx-decider-v1.3](https://huggingface.co/perplexity-ai/pplx-decider-v1.3) |
+| 本エンジン用の重み | [8-bit / 9.6 GB](https://huggingface.co/masakiaota/pplx-decider-flash-v1.3-mlx) | [4-bit / 16.7 GB](https://huggingface.co/masakiaota/pplx-decider-v1.3-mlx) |
+| 推奨メモリ | 24 GB 以上 | 36 GB 以上 |
+| プロセス起動〜受付開始 | 0.4〜0.5 s | 0.3〜0.5 s |
+| プロセス起動〜初回回答 | 0.5 s | 0.6〜1.0 s |
+| 1 件（427 トークン） | 43 ms | 220 ms |
+| 20 件を 1 つの配列で送信 | 0.31 s | 1.92 s |
+| 長文入力（32.4K トークン） | 7.0 s | 22.9 s |
+| 混在した 1,072 件を配列で一括処理 | 47 s | 236 s |
+| MLX ピークメモリ（HTTP ベンチマーク後） | 14.2 GB | 23.7 GB |
 
-公式 API に無い機能である。違いの一覧は [docs/api.md](docs/api.md) にある。
+Mac Studio（M5 Ultra）での HTTP 計測値です。27B は元の BF16 モデルでは最大 57.1 GB のメモリを消費しますが、行単位 4-bit 量子化により HTTP ベンチマーク後で 23.7 GB（32K トークンの Locate 実行時でも 25.0 GB）まで抑えています。モデルごとの詳しい仕様や測定値は [docs/models.md](docs/models.md) をご覧ください。
 
-- **配列。** 本文の JSON 配列を POST すると、同じ順の配列が返る。不正な項目の位置には `{"error": ...}` が入り、
-  ほかの項目には答える。64件以上の配列は内部で 2,048 トークンの固定の束に詰める。大量の処理ではこれが最も速い。
-- **`?mode=isolated`。** 1要求につき state を1回だけ読み、すべての質問にそこから答える（学習時の並び）。長い state
-  に多くの質問があるときは安い。ただし質問の組み合わせで答えがわずかに動く。既定の `separate` は質問ごとに別の
-  系列で答える。
-- **`?temperature=`。** 省略すると、公式 API と同じくモデルに保存された温度（Flash 1.3303、27B 1.2264）を使う。
-  `?temperature=1` で較正前の確率になる。
-- **`?raw=1`。** 答えの代わりに、質問ごとの readout の生の logit を返す。
-- **Locate。** `{"type": "locate", "instructions": "error codes"}` は、state の文字列をそのまま抜き出した区間を、
-  文字位置とスコア付きで返す。Locate 用の重みは最初の Locate 要求で読み込む（Flash は 3.8 GB 増える）。
+### 品質
 
-```sh
-curl -s 'localhost:8000/v1/decisions?mode=isolated&temperature=1' -H 'Content-Type: application/json' -d '[
-  {"model": "pplx-decider-flash-v1.3", "state": "The museum opened in 1931.",
-   "questions": {"a": {"type": "noul", "instructions": "Did it open before 1950?"}}},
-  {"model": "pplx-decider-flash-v1.3", "state": "Error E401 after the key rotation.",
-   "questions": {"code": {"type": "locate", "instructions": "error codes"}}}]'
-```
+元のモデル（BF16）の参照出力とどの程度同じ判断になるかを、学習に使用していない評価データで検証しています。
 
-## ファイルで渡す
+| BF16 との一致率 | Flash | 27B |
+|---|---:|---:|
+| 二値判定（`noul`） | 821 / 826 | 717 / 726 |
+| 選択（`choice`） | 222 / 224 | 161 / 164 |
+| スコア（`score`、最尤段階） | 73 / 74 | 70 / 74 |
+| Locate（抽出した区間の集合） | 305 / 314 | 100 / 114 |
+| BoolQ ゲート（4 つの実行条件） | 各 100 / 100 | 各 100 / 100 |
+
+ご自身の環境で元のモデルと比較する手順は [bench/quality/](bench/quality/README.md)（英語）にまとめています。
+
+## その他の使い方
+
+HTTP サーバーのほか、JSONL ファイルの一括処理や Python からの直接呼び出しに対応しています。
+
+### JSONL ファイルの一括処理
 
 ```sh
 uv run decider-mlx run --model pplx-decider-flash-v1.3 --input requests.jsonl --output responses.jsonl
 ```
 
-入力の各行は1要求（`{"state", "questions"}`。`model` は要らない）か、その行だけの設定を付けた
-`{"id": ..., "request": {...}, "options": {"execution_mode": "isolated", "temperature": 1.0, "raw": false}}`
-である。出力の各行は `{"id", "index", "response"}` または `{"id", "index", "error": {"type", "message"}}` で、
-入力と同じ順に並ぶ。64行以上のファイルは大きな配列と同じく詰めて処理する。失敗した行があれば終了コードは 1 になる。
-
-## Python
+### Python API
 
 ```python
 from decider_mlx import load
 
-app = load("pplx-decider-flash-v1.3")      # 重みを読み込んだら返る
-response = app.decide({"state": "The museum opened in 1931.",
-                       "questions": {"a": {"type": "noul", "instructions": "Did it open before 1950?"}}})
-responses = app.decide([request1, request2], execution_mode="isolated", temperature=1.0)
-logits = app.decide(request1, return_logits=True)
-results = app.decide_each([request1, bad_request])   # 要求ごとに応答か例外
-app.wait_ready()                                   # 測定用：裏の準備が終わるまで待つ
+app = load("pplx-decider-flash-v1.3")
+response = app.decide({
+    "state": "The museum opened in 1931.",
+    "questions": {"a": {"type": "noul", "instructions": "Did it open before 1950?"}},
+})
 ```
 
-`decide` はスレッド安全である。どのスレッドから呼んでも、モデルの処理担当スレッドが来た順に1つずつ処理する。
-不正な要求には `decider_mlx.RequestError` を、質問と state が 32,768 トークンに収まらないときは
-`decider_mlx.LengthError` を投げる（切り詰めはしない）。画像は `"images"` に、ファイルパス・data URL・PIL 画像の
-いずれかで渡す。`decider_mlx` は `mlx` より先に import する。ライブラリは画面に何も出さず、`logging` にだけ書く。
+より詳しい使い方やオプションについては [使い方ガイド](docs/usage.ja.md) をご覧ください。
 
-## 2つのモデルを同時に使う
+## ドキュメント
 
-モデルごとにサーバーを1つ動かす：
-
-```sh
-uv run decider-mlx serve --model pplx-decider-flash-v1.3 --port 8000
-uv run decider-mlx serve --model pplx-decider-v1.3 --port 8001
-```
-
-2つのプロセスは独立している（ロックも共有ファイルも無い）。同時に推論でき、GPU は共有する。プロセス間でロックを
-かける方式は、自由に動かすより 11〜35% 遅かった。
-
-## 品質
-
-元のモデルの BF16 参照出力と、評価用に取り分けたデータで比べた：
-
-| BF16 と同じ答え | Flash | 27B |
-|---|---:|---:|
-| 二値（`noul`） | 821/826 | 717/726 |
-| `choice` | 222/224 | 161/164 |
-| `score`（argmax） | 73/74 | 70/74 |
-| Locate の区間の集合 | 305/314 | 100/114 |
-| BoolQ ゲート、4つの実行条件 | 各 100/100 | 各 100/100 |
-
-モデルごとの詳細は [docs/models.md](docs/models.md) にある。ビルドを元のモデルと比べる手順は
-[bench/quality/](bench/quality/README.md) にある（英語）。
-
-## 開発
-
-```sh
-uv sync                                         # pytest も入る
-uv run pytest                                   # モデル不要の試験（API、HTTP の検査、模擬 Hub に対する fetch）
-DECIDER_MLX_TEST_MODELS=pplx-decider-flash-v1.3,pplx-decider-v1.3 HF_HUB_OFFLINE=1 uv run pytest
-```
-
-`DECIDER_MLX_TEST_MODELS` を付けると、モデルを Hugging Face のキャッシュから読み、BoolQ を4つの実行条件で、
-HTTP の全機能のケースとあわせて `tests/golden` とバイト単位で比べる（[tests/golden/README.md](tests/golden/README.md)）。
-golden は M5 Ultra で記録した。ほかのチップや MLX のビルドでは最後の桁が変わりうる。
-
-```sh
-uv run python bench/speed.py --model pplx-decider-flash-v1.3
-```
-
-は、プロセス内での時間（単発の要求、20要求の配列、長い入力）を表示する。`tests/hub_mock.py` はフォルダをモデルの
-リポジトリとして配る、Hugging Face Hub の代わりのローカルサーバーである。`fetch` をネットワーク無しで試すのに使う。
-
-## 作り方の記録
-
-[experiments/](experiments/README.md) は研究の記録である（英語）。モデルごとに何を試し、何を残し、何をやめたか、
-その理由と測定値を書いてある（重み、INT8・W4A8 カーネル、長さのバケット、まとめ処理、起動）。
-[tools/convert/](tools/convert/README.md) は、公開している重みを元の BF16 チェックポイントから作るスクリプトである（英語）。
+- [使い方ガイド](docs/usage.ja.md)：HTTP サーバーの詳細、画像、配列バッチや Locate などのローカル拡張、Python API、2 モデル同時起動、オフライン利用
+- [API 仕様の差分](docs/api.md)：公式 Decisions API との違い一覧（英語）
+- [モデルの詳細と測定値](docs/models.md)：Flash / 27B の設計、メモリ、ベンチマーク詳細（英語）
+- [品質検証](bench/quality/README.md)：元の BF16 モデルとの比較手順（英語）
+- [開発とテスト](CONTRIBUTING.md)：テスト実行、速度ベンチマーク、MLX 0.32.5 wheel の補足（英語）
+- [設計と研究の記録](experiments/README.md) / [重み変換スクリプト](tools/convert/README.md)：最適化の検証記録と BF16 からの変換手順（英語）
 
 ## ライセンス
 
-Apache-2.0（[LICENSE](LICENSE)）。Metal カーネルの一部は MLX と mxfp4-int8-m5（どちらも MIT）を元にしている
-（[NOTICE](NOTICE)）。`tests/golden` の試験データには BoolQ（CC BY-SA 3.0）と SQuAD（CC BY-SA 4.0）の抜粋を含む
-（[tests/golden/README.md](tests/golden/README.md)）。モデルの重みは Perplexity のモデルから派生した Apache-2.0
-のものである。各 Hugging Face リポジトリの NOTICE を参照のこと。
+- 本リポジトリのコードは Apache-2.0 ライセンスです（[LICENSE](LICENSE)）。
+- Metal カーネルの一部は MLX および mxfp4-int8-m5（いずれも MIT ライセンス）をベースにしています（[NOTICE](NOTICE)）。
+- `tests/golden` のテストデータには BoolQ（CC BY-SA 3.0）および SQuAD（CC BY-SA 4.0）の抜粋を含みます（[tests/golden/README.md](tests/golden/README.md)）。
+- 変換済みのモデル重みは Perplexity のモデルから派生した Apache-2.0 ライセンスです。詳細は各 Hugging Face リポジトリの `NOTICE` をご確認ください。

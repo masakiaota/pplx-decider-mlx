@@ -38,7 +38,7 @@ def hub(tmp_path):
     make_repo(tmp_path / 'repo')
     server, url = start({REPO: tmp_path / 'repo'})
     env = {k: v for k, v in os.environ.items() if not k.startswith('HF_')}
-    env.update(HF_ENDPOINT=url, HF_HUB_CACHE=str(tmp_path / 'cache'), HF_HUB_DISABLE_TELEMETRY='1')
+    env.update(HF_ENDPOINT=url, HF_HUB_CACHE=str(tmp_path / 'cache'), HF_HUB_DISABLE_TELEMETRY='1', LC_ALL='en_US.UTF-8')
     yield server, tmp_path, env
     server.shutdown()
 
@@ -59,6 +59,7 @@ def test_fetch_verify_and_reuse(hub):
     assert sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()) == \
         ['LICENSE', 'README.md', 'config.json', 'manifest.json', 'sub/head.safetensors', 'weights.safetensors']
     assert 'Downloaded pplx-decider-flash-v1.3' in r.stderr and 'Tip 1/' in r.stderr and 'Verified 4 files' in r.stderr
+    assert f'uv run decider-mlx serve --model {FLASH} --port 8000' in r.stderr
     assert (root / 'weights.safetensors').read_bytes() == (tmp / 'repo/weights.safetensors').read_bytes()
     assert root.name == server.repos[REPO].commit               # the snapshot of the resolved commit
     server.shutdown()                                            # no network from here on
@@ -119,7 +120,27 @@ def test_progress_text():
     assert fetch._duration(3725) == '1h02m' and fetch._duration(65) == '1m05s' and fetch._duration(9) == '9s'
 
 
-def test_tips_are_short():
-    assert len(tips.TIPS) >= 7
-    for title, *lines in tips.TIPS:
-        assert title and 1 <= len(lines) <= 4 and all(len(line) <= 110 for line in lines)
+def test_tips_are_short_and_match_across_languages():
+    assert set(tips.TIPS) == {'en', 'ja'} and len(tips.TIPS['en']) == len(tips.TIPS['ja']) >= 5
+    for lang in tips.TIPS:
+        for i in range(tips.count(lang)):
+            for model in registry.MODELS:
+                title, lines = tips.tip(i, model, lang)
+                assert title and 1 <= len(lines) <= 3 and all(len(line) <= 110 for line in lines)
+                assert '{' not in title.replace('{"', '') and '{model}' not in ''.join(lines)
+                assert '{locate_gb}' not in ''.join(lines) and '約 ? GB' not in ''.join(lines)
+
+
+def test_tip_language():
+    assert tips.language({'LANG': 'ja_JP.UTF-8'}, []) == 'ja'
+    assert tips.language({'LC_ALL': 'en_US.UTF-8', 'LANG': 'ja_JP.UTF-8'}, []) == 'en'
+    assert tips.language({'LC_ALL': 'C', 'LANG': 'ja_JP.UTF-8'}, []) == 'ja'
+    assert tips.language({}, ['ja-JP', 'en-US']) == 'ja'
+    assert tips.language({'LANG': 'C.UTF-8'}, ['en-US']) == 'en'
+    assert tips.language({}, []) == 'en'
+
+
+def test_next_steps_name_the_model():
+    for lang in tips.TIPS:
+        for model in registry.MODELS:
+            assert any(f'--model {model} ' in line for line in tips.next_steps(model, lang))
