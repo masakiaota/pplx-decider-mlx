@@ -125,19 +125,21 @@ MLX 0.32.4.
 
 ## Uploading to Hugging Face
 
-Upload with `HF_HUB_DISABLE_XET=1`. When the v1.3 repositories were uploaded (2026-11-20, huggingface_hub 1.31.0,
-hf-xet 1.8.0, from a home connection whose upload capacity measured 14-17 Mbps), the default Xet transfer was
-slow and unstable, while plain HTTP (LFS) ran close to the connection's capacity:
+The v1.3 repositories were uploaded on 2026-11-20 (huggingface_hub 1.31.0, hf-xet 1.8.0) from a home connection
+whose upload capacity measured 14-17 Mbps (about 1.7-2.1 MB/s). Average throughput per commit:
 
-| Transfer | Throughput | What went wrong |
-|---|---:|---|
-| Xet (default), 12 concurrent streams | 0.13-0.9 MB/s, changing by the hour | presigned S3 uploads rejected (HTTP 400 / 403) and retried; with the default 300 s read timeout and many streams, requests timed out and the upload stalled for hours |
-| Xet, 1 stream | about 0.15 MB/s | |
-| HTTP, `HF_HUB_DISABLE_XET=1` | about 1.3 MB/s | |
+| Transfer | Many files of 15-45 MB (batches of about 1.5 GB) | One large file (1.8-3.6 GB) |
+|---|---:|---:|
+| Xet (default), 12 concurrent streams | 0.27-0.74 MB/s | 0.32-0.76 MB/s |
+| HTTP (LFS), `HF_HUB_DISABLE_XET=1` | 0.53-0.94 MB/s | 0.29 MB/s |
 
-The upload capacity of the connection was not the limit: during the slowest Xet period it measured 14 Mbps (about
-1.7 MB/s) while the upload sent 0.13 MB/s. Others report the same on the Hugging Face forums, and disabling Xet is
-the usual workaround.
+- **Xet was unstable.** Presigned S3 uploads were rejected (HTTP 400 / 403) and retried. With the default 300 s read
+  timeout and many streams, requests timed out and the upload stalled for hours; a read timeout of 1 h
+  (`HF_XET_CLIENT_READ_TIMEOUT=1h`) fixed the stalls. A single stream was slower still (about 0.15 MB/s). During its
+  slowest period Xet sent about 0.13 MB/s while the connection measured 14 Mbps, so the connection was not the limit.
+- **HTTP was steadier for many files**, which it uploads in parallel, but slow for one large file.
+- **Suggestion**: HTTP for folders of many files, Xet with a long read timeout for single files of several GB. A
+  watchdog on throughput and on request errors catches a stalled upload early.
 
 Commit in batches (one large file, or small files up to about 1.5 GB, with `upload_folder(allow_patterns=...)`),
 retry each batch, and skip files already on the Hub with the same sha256. A failure then costs one batch, not the

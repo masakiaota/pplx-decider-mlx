@@ -45,7 +45,7 @@ MODELS = {
     'pplx-decider-v1.3': ModelSpec(
         name='pplx-decider-v1.3',
         hf_repo='masakiaota/pplx-decider-v1.3-mlx',
-        hf_revision='TBD-after-upload',     # PLACEHOLDER: set to the commit hash of the uploaded repository
+        hf_revision='9068719817b3596c25b5d0a79427075ec0aa7e48',
         temperature=1.2263882,
         arithmetic='w4a8-s4', delta_threadgroup=(32, 1, 1),
         bucket_max_chunks=8, batch16=False, long_graph_min=4096, image_graphs=False,
