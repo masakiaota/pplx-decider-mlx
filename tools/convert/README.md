@@ -122,3 +122,24 @@ two repositories as uploaded:
 
 Not run in full: `gram.py` passes 1-7 and `rowq4.py` for all 368 tensors (about 80 minutes together); step 4b with
 MLX 0.32.4.
+
+## Uploading to Hugging Face
+
+Upload with `HF_HUB_DISABLE_XET=1`. When the v1.3 repositories were uploaded (2026-11-20, huggingface_hub 1.31.0,
+hf-xet 1.8.0, from a home connection whose upload capacity measured 14-17 Mbps), the default Xet transfer was
+slow and unstable, while plain HTTP (LFS) ran close to the connection's capacity:
+
+| Transfer | Throughput | What went wrong |
+|---|---:|---|
+| Xet (default), 12 concurrent streams | 0.13-0.9 MB/s, changing by the hour | presigned S3 uploads rejected (HTTP 400 / 403) and retried; with the default 300 s read timeout and many streams, requests timed out and the upload stalled for hours |
+| Xet, 1 stream | about 0.15 MB/s | |
+| HTTP, `HF_HUB_DISABLE_XET=1` | about 1.3 MB/s | |
+
+The upload capacity of the connection was not the limit: during the slowest Xet period it measured 14 Mbps (about
+1.7 MB/s) while the upload sent 0.13 MB/s. Others report the same on the Hugging Face forums, and disabling Xet is
+the usual workaround.
+
+Commit in batches (one large file, or small files up to about 1.5 GB, with `upload_folder(allow_patterns=...)`),
+retry each batch, and skip files already on the Hub with the same sha256. A failure then costs one batch, not the
+whole repository. Each commit changes the repository's revision, so set `hf_revision` in
+`src/decider_mlx/registry.py` after the last commit (including any README update).
