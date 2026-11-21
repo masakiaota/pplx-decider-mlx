@@ -58,10 +58,10 @@ LABEL = {'en': 'Tip', 'ja': 'ヒント'}
 
 NEXT = {
     'en': ('Ready. To start the server, run:',
-           '  uv run decider-mlx serve --model {model} --port 8000',
+           '  uv run decider-mlx serve --model {model} --port {port}',
            'For an example request, see "Quick start" in the README.'),
     'ja': ('準備が完了しました。サーバーを起動するには次のコマンドを実行してください。',
-           '  uv run decider-mlx serve --model {model} --port 8000',
+           '  uv run decider-mlx serve --model {model} --port {port}',
            'リクエストの例は README の「クイックスタート」をご覧ください。'),
 }
 
@@ -113,4 +113,5 @@ def tip(i, model, lang='en'):
 
 def next_steps(model, lang='en'):
     """Lines shown once after `decider-mlx fetch` has finished."""
-    return [_fill(line, model) for line in NEXT[lang]]
+    port = 8001 if model == 'pplx-decider-v1.3' else 8000     # the ports of the README and the usage guide
+    return [_fill(line, model).replace('{port}', str(port)) for line in NEXT[lang]]
