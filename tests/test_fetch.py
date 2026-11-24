@@ -147,3 +147,34 @@ def test_next_steps_name_the_model():
     for lang in tips.TIPS:
         for model in registry.MODELS:
             assert any(f'--model {model} ' in line for line in tips.next_steps(model, lang))
+
+
+def test_multipart_range_download(tmp_path):
+    """Files larger than MULTIPART_MIN_SIZE are split into concurrent Range requests and verified."""
+    repo_dir = tmp_path / 'repo'
+    repo_dir.mkdir()
+    big = os.urandom(20 * 1024 * 1024 + 12345)   # > 16 MiB -> 2 Range parts
+    small = b'{"model_type": "test"}'
+    (repo_dir / 'big.safetensors').write_bytes(big)
+    (repo_dir / 'config.json').write_bytes(small)
+    manifest = {
+        'format': 'decider-mlx-manifest-v1', 'model': FLASH, 'repository': REPO,
+        'files': {
+            'big.safetensors': {'size': len(big), 'sha256': fetch.sha256(repo_dir / 'big.safetensors')},
+            'config.json': {'size': len(small), 'sha256': fetch.sha256(repo_dir / 'config.json')},
+        },
+    }
+    (repo_dir / 'manifest.json').write_text(json.dumps(manifest))
+    server, url = start({REPO: repo_dir})
+    env = {k: v for k, v in os.environ.items() if not k.startswith('HF_')}
+    env.update(HF_ENDPOINT=url, HF_HUB_CACHE=str(tmp_path / 'cache'), HF_HUB_DISABLE_TELEMETRY='1', LC_ALL='en_US.UTF-8')
+    try:
+        r = cli(env, 'fetch', '--model', FLASH)
+        assert r.returncode == 0, r.stderr
+        root = Path(r.stdout.strip())
+        assert (root / 'big.safetensors').read_bytes() == big
+        assert (root / 'config.json').read_bytes() == small
+        big_gets = [req for req in server.stats['requests'] if req[0] == 'GET' and req[1].endswith('/big.safetensors')]
+        assert len(big_gets) == 2
+    finally:
+        server.shutdown()
