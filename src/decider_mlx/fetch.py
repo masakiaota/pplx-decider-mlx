@@ -231,7 +231,10 @@ class _FileDownload:
         self.tmp_path = None
         self.fd = None
         self.lock = threading.Lock()
+        self.cond = threading.Condition(self.lock)
         self.remaining_parts = 0
+        self.active_range_writers = 0
+        self.range_bytes = 0
         self.full_fallback = False
         self.verified = False
         self.skipped = False                    # True when optional file is 404 or already cached
@@ -407,6 +410,7 @@ def _download_part(client, headers, hub_origin, state, start, end, counter, canc
             if state.full_fallback and not fallback_owner:
                 return
         part_received = 0
+        range_counted = 0
         try:
             with state.lock:
                 url = state.location
@@ -414,13 +418,18 @@ def _download_part(client, headers, hub_origin, state, start, end, counter, canc
             with _stream_url(client, url, headers, hub_origin, range_header=rng) as resp:
                 _check_status(resp, state.filename)
                 if resp.status_code == 200:
-                    # Server does not support Range requests: let one worker receive the full body.
+                    # Server does not support Range requests: stop sibling writers and let one worker receive the body.
                     if not fallback_owner:
-                        with state.lock:
+                        with state.cond:
                             if state.full_fallback:
                                 return
                             state.full_fallback = True
+                            state.cond.wait_for(lambda: state.active_range_writers == 0)
+                            if state.range_bytes:
+                                counter.add(-state.range_bytes)
+                                state.range_bytes = 0
                         fallback_owner = True
+                    os.ftruncate(state.fd, 0)
                     digest = hashlib.sha256() if state.expected_sha256 is not None else None
                     for block in resp.iter_bytes(chunk_size=STREAM_CHUNK_SIZE):
                         if cancel.is_set():
@@ -438,26 +447,46 @@ def _download_part(client, headers, hub_origin, state, start, end, counter, canc
                     return
                 if resp.status_code != 206:
                     raise FetchError(f'{state.filename}: expected HTTP 206, got {resp.status_code}')
-                for block in resp.iter_bytes(chunk_size=STREAM_CHUNK_SIZE):
-                    if cancel.is_set():
+                with state.cond:
+                    if state.full_fallback:
                         return
-                    if not block:
-                        continue
-                    if part_received + len(block) > expected:
-                        raise FetchError(f'{state.filename}: range response exceeded expected length')
-                    state.write_at(start + part_received, block)
-                    part_received += len(block)
-                    counter.add(len(block))
+                    state.active_range_writers += 1
+                try:
+                    for block in resp.iter_bytes(chunk_size=STREAM_CHUNK_SIZE):
+                        if cancel.is_set() or state.full_fallback:
+                            return
+                        if not block:
+                            continue
+                        if part_received + len(block) > expected:
+                            raise FetchError(f'{state.filename}: range response exceeded expected length')
+                        state.write_at(start + part_received, block)
+                        part_received += len(block)
+                        range_counted += len(block)
+                        with state.lock:
+                            state.range_bytes += len(block)
+                        counter.add(len(block))
+                finally:
+                    with state.cond:
+                        state.active_range_writers -= 1
+                        state.cond.notify_all()
             if part_received != expected:
                 raise _RetryableError(f'{state.filename}: short range ({part_received}/{expected})', delay=1)
             with state.lock:
+                if state.full_fallback:
+                    return
                 state.remaining_parts -= 1
                 done_file = state.remaining_parts == 0
             if done_file:
                 state.commit()
             return
         except (_RetryableError, httpx.TransportError) as e:
-            if part_received:
+            if range_counted:
+                with state.lock:
+                    drop = min(range_counted, state.range_bytes)
+                    state.range_bytes -= drop
+                if drop:
+                    counter.add(-drop)
+            elif part_received:
                 counter.add(-part_received)
             if cancel.is_set() or attempt >= MAX_RETRIES:
                 raise FetchError(f'{state.filename}: {e}') from e
@@ -529,13 +558,17 @@ def _download_files(model, root, manifest, todo, extra_todo, counter, cancel):
                             futures.append(pool.submit(_download_part, client, headers, hub_origin, st, start, end, counter, cancel))
                     else:
                         futures.append(pool.submit(_download_single, client, headers, hub_origin, st, counter, cancel))
-                for fut in as_completed(futures):
-                    fut.result()
-    except BaseException:
-        cancel.set()
+                try:
+                    for fut in as_completed(futures):
+                        fut.result()
+                except BaseException:
+                    cancel.set()
+                    for fut in futures:
+                        fut.cancel()
+                    raise
+    finally:
         for st in active:
             st.cleanup()
-        raise
 
     return {st.filename for st in states if st.verified}
 
@@ -555,9 +588,9 @@ def fetch(model, screen=None, verify=True):
     root = manifest_path.parent
     total = sum(e['size'] for e in manifest['files'].values())
     todo = missing_files(root, manifest)
-    extra_todo = [name for name in EXTRA if not (root / name).exists()]
     verified = set()
-    if todo or extra_todo:
+    if todo:
+        extra_todo = [name for name in EXTRA if not (root / name).exists()]
         existing = _existing_bytes(root, manifest)
         counter = _TransferCounter(start=existing)
         cancel = threading.Event()
@@ -588,6 +621,7 @@ def fetch(model, screen=None, verify=True):
                     log.info('%s: %s', model, progress.text())
         except BaseException:
             cancel.set()
+            worker.join(timeout=5)
             if screen is not None:
                 screen.close()
             raise

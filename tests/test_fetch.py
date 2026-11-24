@@ -176,5 +176,9 @@ def test_multipart_range_download(tmp_path):
         assert (root / 'config.json').read_bytes() == small
         big_gets = [req for req in server.stats['requests'] if req[0] == 'GET' and req[1].endswith('/big.safetensors')]
         assert len(big_gets) == 2
+        server.shutdown()
+        offline = env | {'HF_HUB_OFFLINE': '1'}
+        r2 = cli(offline, 'fetch', '--model', FLASH)
+        assert r2.returncode == 0 and 'Verified 2 files' in r2.stderr and 'Downloaded' not in r2.stderr, r2.stderr
     finally:
         server.shutdown()
