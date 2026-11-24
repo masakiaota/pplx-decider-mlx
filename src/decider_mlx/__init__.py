@@ -12,7 +12,7 @@ import sys as _sys
 if 'mlx.core' not in _sys.modules:
     _os.environ['MLX_ENABLE_TF32'] = '0'
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0.dev1"
 
 from .app import App, load  # noqa: E402
 from .protocol import LengthError, RequestError  # noqa: E402

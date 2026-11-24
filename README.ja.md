@@ -2,7 +2,7 @@
 
 [English](README.md) | 日本語
 
-**decider-mlx** は、Perplexity の分類モデル **Decider v1.3（Flash / 27B）** を Apple Silicon（M5 以降）の Mac でローカル実行するための、[MLX](https://github.com/ml-explore/mlx) ベースの推論エンジンです。公式 [Decisions API](https://docs.perplexity.ai/api-reference/decisions-post) 互換の HTTP サーバーに加え、JSONL 一括処理と Python API を提供しており、既存コードの接続先を手元の Mac に向けるだけで利用できます。
+**decider-mlx** は、Perplexity の分類モデル **Decider v1.3（Flash / 27B）** を Apple Silicon の Mac（M5 以降推奨。Flash は M1〜M4 でも標準 MLX フォールバックで動作）でローカル実行するための、[MLX](https://github.com/ml-explore/mlx) ベースの推論エンジンです。公式 [Decisions API](https://docs.perplexity.ai/api-reference/decisions-post) 互換の HTTP サーバーに加え、JSONL 一括処理と Python API を提供しており、既存コードの接続先を手元の Mac に向けるだけで利用できます。
 
 - **公式 Mac アプリの約 2 倍の速度**：Flash モデルでは、公式 Mac アプリの約 2 倍の速度で応答します。さらに、本エンジン独自の配列バッチ送信を使うと、約 3.9 倍まで高速化されます。
 - **27B モデルとローカル拡張に対応**：公式 Mac アプリにはない **27B モデル**も、元の BF16 の半分以下のメモリで動かせます。公式 API にない該当箇所抽出（Locate）や `isolated` モードも利用できます。
@@ -31,7 +31,7 @@ Flash モデルについて、同じ HTTP 負荷での処理時間を公式 Mac 
 
 ### 動作環境
 
-- **チップ**：Apple Silicon **M5 以降**（M4 以前でも動作する可能性がありますが、サポート外）
+- **チップ**：Apple Silicon **M5 以降**推奨（**27B** は M5 以降が必須。**Flash** は M1〜M4 でも標準 MLX フォールバックで動作）
 - **OS**：macOS 27 以降
 - **推奨メモリ**：24 GB 以上（Flash）／ 36 GB 以上（27B）
 - **ディスク空き容量**：9.6 GB 以上（Flash）／ 16.7 GB 以上（27B）
