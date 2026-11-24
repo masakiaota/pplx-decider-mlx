@@ -301,6 +301,12 @@ class _FileDownload:
         self.tmp_path = self.blobs / f'{self.etag}.{uuid.uuid4().hex[:8]}.incomplete'
         self.fd = os.open(self.tmp_path, os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0o644)
 
+    def ensure_open(self):
+        """Lazily open the temporary file once under self.lock when the first worker starts."""
+        with self.lock:
+            if self.fd is None and self.tmp_path is None:
+                self.open_temp()
+
     def write_at(self, offset, data):
         view = memoryview(data)
         pos = 0
@@ -429,6 +435,7 @@ def _download_part(client, headers, hub_origin, state, start, end, counter, canc
                                 counter.add(-state.range_bytes)
                                 state.range_bytes = 0
                         fallback_owner = True
+                    state.ensure_open()
                     os.ftruncate(state.fd, 0)
                     digest = hashlib.sha256() if state.expected_sha256 is not None else None
                     for block in resp.iter_bytes(chunk_size=STREAM_CHUNK_SIZE):
@@ -450,6 +457,8 @@ def _download_part(client, headers, hub_origin, state, start, end, counter, canc
                 with state.cond:
                     if state.full_fallback:
                         return
+                    if state.fd is None and state.tmp_path is None:
+                        state.open_temp()
                     state.active_range_writers += 1
                 try:
                     for block in resp.iter_bytes(chunk_size=STREAM_CHUNK_SIZE):
@@ -552,7 +561,6 @@ def _download_files(model, root, manifest, todo, extra_todo, counter, cancel):
                 for st in active:
                     if st.size is not None and st.size > MULTIPART_MIN_SIZE:
                         parts = [(off, min(off + RANGE_CHUNK_SIZE, st.size) - 1) for off in range(0, st.size, RANGE_CHUNK_SIZE)]
-                        st.open_temp()
                         st.remaining_parts = len(parts)
                         for start, end in parts:
                             futures.append(pool.submit(_download_part, client, headers, hub_origin, st, start, end, counter, cancel))

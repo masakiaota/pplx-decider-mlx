@@ -99,9 +99,11 @@ class App:
     """A loaded model. decide() is thread-safe: calls are queued to the one worker thread in arrival order."""
 
     def __init__(self, model, _weights=None):
+        from .model import check_hardware
         from .registry import resolve_weights, spec
         self.spec = spec(model)
         self.model = self.spec.name
+        check_hardware(self.spec)
         self._weights = _weights or resolve_weights(self.model)   # _weights: internal (tests)
         self._jobs = queue.Queue()
         self._loaded = threading.Event()

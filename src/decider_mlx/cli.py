@@ -60,7 +60,9 @@ def _ensure(model):
 
 
 def cmd_serve(a):
+    from .model import check_hardware
     from .server.http import serve
+    check_hardware(spec(a.model))
     _ensure(a.model)
     status = Status()
     status(f'{a.model}: loading weights')
@@ -71,6 +73,8 @@ def cmd_serve(a):
 
 def cmd_run(a):
     from . import load
+    from .model import check_hardware
+    check_hardware(spec(a.model))
     lines = [json.loads(line) for line in a.input.read_text().splitlines() if line.strip()]
     records = []
     for i, line in enumerate(lines):

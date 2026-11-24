@@ -22,7 +22,7 @@ import numpy as np
 from . import registry
 from .batching.bucket import Buckets
 from .batching.bulk import Bulk
-from .model import METAL_ATTENTION_LIMIT, AffineInt8, Backbone, Layout, MappedSafetensors, W4A8, forward_core, gpu_info, has_m5_kernels
+from .model import METAL_ATTENTION_LIMIT, AffineInt8, Backbone, Layout, MappedSafetensors, W4A8, check_hardware, forward_core, gpu_info, has_m5_kernels
 from .protocol import Encoder, RequestError, answer, probabilities, validate
 
 log = logging.getLogger(__name__)
@@ -62,13 +62,8 @@ class Engine:
             raise ValueError(f'{spec.name}: saved temperature {self.temperature} differs from the registry')
         self.model_name = spec.name
         self.max_length = MAX_LENGTH
+        check_hardware(spec)
         self.use_m5_kernels = has_m5_kernels()
-        if spec.arithmetic == 'w4a8-s4' and not self.use_m5_kernels:
-            device_name, arch, _ = gpu_info()
-            raise RuntimeError(
-                f'{spec.name} requires Apple silicon M5 or later (detected {device_name}, {arch}); '
-                f'its row-wise 4-bit weights require M5 Metal tensor ops. Use pplx-decider-flash-v1.3 on M1-M4 Macs.'
-            )
         if not self.use_m5_kernels:
             device_name, arch, _ = gpu_info()
             log.info('%s: detected %s (%s); using standard MLX quantized matmul and SDPA fallback', spec.name, device_name, arch)

@@ -36,6 +36,16 @@ def has_m5_kernels():
     return gen is not None and gen >= _M5_GPU_GEN
 
 
+def check_hardware(spec):
+    """Raise RuntimeError if `spec` requires M5+ Metal kernels on an older Apple silicon GPU."""
+    if spec.arithmetic == 'w4a8-s4' and not has_m5_kernels():
+        device_name, arch, _ = gpu_info()
+        raise RuntimeError(
+            f'{spec.name} requires Apple silicon M5 or later (detected {device_name}, {arch}); '
+            f'its row-wise 4-bit weights require M5 Metal tensor ops. Use pplx-decider-flash-v1.3 on M1-M4 Macs.'
+        )
+
+
 # ---------------------------------------------------------------- weights
 _DTYPES = {'BF16': (mx.bfloat16, 2), 'F16': (mx.float16, 2), 'F32': (mx.float32, 4),
            'U8': (mx.uint8, 1), 'U32': (mx.uint32, 4), 'I32': (mx.int32, 4), 'I64': (mx.int64, 8)}
