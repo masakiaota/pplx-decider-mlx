@@ -19,6 +19,31 @@ from .kernels import attention as attention_kernels
 from .kernels import deltanet
 
 METAL_ATTENTION_LIMIT = 512   # chunks up to this length use the segment attention kernel; longer ones the tiled kernel
+_M5_GPU_GEN = 17              # applegpu_g17* (M5 / Apple10 GPU) introduces NAX and MPP integer matmul2d
+
+
+def gpu_info():
+    """(device_name, architecture, generation_or_None) from MLX's Metal device."""
+    info = mx.device_info()
+    arch = str(info.get('architecture', ''))
+    m = re.search(r'g(\d+)', arch)
+    return str(info.get('device_name', 'unknown')), arch, (int(m.group(1)) if m else None)
+
+
+def has_m5_kernels():
+    """True on Apple silicon M5 or later (applegpu_g17+), which support MPP integer matmul2d and NAX attention."""
+    _, _, gen = gpu_info()
+    return gen is not None and gen >= _M5_GPU_GEN
+
+
+def check_hardware(spec):
+    """Raise RuntimeError if `spec` requires M5+ Metal kernels on an older Apple silicon GPU."""
+    if spec.arithmetic == 'w4a8-s4' and not has_m5_kernels():
+        device_name, arch, _ = gpu_info()
+        raise RuntimeError(
+            f'{spec.name} requires Apple silicon M5 or later (detected {device_name}, {arch}); '
+            f'its row-wise 4-bit weights require M5 Metal tensor ops. Use pplx-decider-flash-v1.3 on M1-M4 Macs.'
+        )
 
 
 # ---------------------------------------------------------------- weights
@@ -96,7 +121,7 @@ def silu(x):
 
 
 class Backbone:
-    def __init__(self, directory, loader, *, delta_threadgroup):
+    def __init__(self, directory, loader, *, delta_threadgroup, use_nax=None):
         self.directory = Path(directory)
         self.config = json.loads((self.directory / 'config.json').read_text())
         self.text = self.config['text_config']
@@ -105,6 +130,7 @@ class Backbone:
         self.dtype = mx.bfloat16
         self.loader = loader
         self.delta_threadgroup = tuple(delta_threadgroup)
+        self.use_nax = has_m5_kernels() if use_nax is None else bool(use_nax)
         self.locate_enabled = False      # Locate forwards: Locate weights / LoRA and the marker embedding
         self.locate = None               # LocateWeights once loaded (locate.py)
         metadata = self.directory / 'mlx_config.json'
@@ -186,11 +212,14 @@ class AffineInt8:
     """
     name = 'affine-int8'
 
-    def __init__(self, model, int8_values, score_layers):
+    def __init__(self, model, int8_values, score_layers, *, use_int8=True):
         self.model, self.values, self.score_layers = model, int8_values, frozenset(score_layers)
+        self.use_int8 = bool(use_int8)
         self.score = None; self.mixed = False; self.lengths = (); self.bulk = None
 
     def key(self):
+        if not self.use_int8:
+            return False
         return self.score if self.score is not None else False
 
     def standard(self, x, name):
@@ -238,6 +267,8 @@ class AffineInt8:
         return mx.concatenate(parts)
 
     def __call__(self, x, name):
+        if not self.use_int8:
+            return self.standard(x, name)
         value = self.values.get(name)
         if self.model.locate_enabled or value is None or math.prod(x.shape[:-1]) < 128:
             return self.standard(x, name)
@@ -380,13 +411,24 @@ def attention(model, x, name, layout, last):
     q = model.rotary(q[None].transpose(0, 2, 1, 3), q_positions).transpose(0, 2, 1, 3)[0]
     k = model.rotary(k[None].transpose(0, 2, 1, 3), layout.positions).transpose(0, 2, 1, 3)[0]
     if not last and max(layout.lengths) > METAL_ATTENTION_LIMIT:
-        key_parts, value_parts, q_lengths, k_lengths = [], [], [], []
-        for qa, qb, ka, kb, kc, kd in layout.groups:
-            key_parts.append(k[ka:kb] if kc == kd else mx.concatenate([k[ka:kb], k[kc:kd]]))
-            value_parts.append(v[ka:kb] if kc == kd else mx.concatenate([v[ka:kb], v[kc:kd]]))
-            q_lengths.append(qb - qa)
-            k_lengths.append(kb - ka + kd - kc)
-        out = attention_kernels.tiled_attention(q, mx.concatenate(key_parts), mx.concatenate(value_parts), q_lengths, k_lengths)
+        if model.use_nax:
+            key_parts, value_parts, q_lengths, k_lengths = [], [], [], []
+            for qa, qb, ka, kb, kc, kd in layout.groups:
+                key_parts.append(k[ka:kb] if kc == kd else mx.concatenate([k[ka:kb], k[kc:kd]]))
+                value_parts.append(v[ka:kb] if kc == kd else mx.concatenate([v[ka:kb], v[kc:kd]]))
+                q_lengths.append(qb - qa)
+                k_lengths.append(kb - ka + kd - kc)
+            out = attention_kernels.tiled_attention(q, mx.concatenate(key_parts), mx.concatenate(value_parts), q_lengths, k_lengths)
+        else:
+            parts = []
+            for qa, qb, ka, kb, kc, kd in layout.groups:
+                query = q[qa:qb][None].transpose(0, 2, 1, 3)
+                keys = k[ka:kb] if kc == kd else mx.concatenate([k[ka:kb], k[kc:kd]])
+                values = v[ka:kb] if kc == kd else mx.concatenate([v[ka:kb], v[kc:kd]])
+                part = mx.fast.scaled_dot_product_attention(query, keys[None].transpose(0, 2, 1, 3),
+                                                            values[None].transpose(0, 2, 1, 3), scale=width ** -0.5)
+                parts.append(part.transpose(0, 2, 1, 3)[0])
+            out = mx.concatenate(parts)
     elif max(layout.lengths) <= METAL_ATTENTION_LIMIT:
         ranges = layout.ranges[layout.markers] if last else layout.ranges
         out = attention_kernels.segment_attention(q, k, v, ranges)

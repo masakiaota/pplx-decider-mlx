@@ -37,7 +37,9 @@ class Status:
 
 def _progress(status, accepting):
     def show(app):
-        if app.ready:
+        if app.prep_error is not None:
+            status(f'{app.model}: startup preparation failed ({type(app.prep_error).__name__}: {app.prep_error})', final=True)
+        elif app.ready:
             status(f'{app.model}: ready ({"accepting requests" if accepting else "running"}; preparation done in {app.prep_s:.1f} s)', final=True)
         else:
             status(f'{app.model}: preparing {app.prep_done}/{app.prep_total} ({"accepting requests" if accepting else "running"})')
@@ -58,7 +60,9 @@ def _ensure(model):
 
 
 def cmd_serve(a):
+    from .model import check_hardware
     from .server.http import serve
+    check_hardware(spec(a.model))
     _ensure(a.model)
     status = Status()
     status(f'{a.model}: loading weights')
@@ -69,6 +73,8 @@ def cmd_serve(a):
 
 def cmd_run(a):
     from . import load
+    from .model import check_hardware
+    check_hardware(spec(a.model))
     lines = [json.loads(line) for line in a.input.read_text().splitlines() if line.strip()]
     records = []
     for i, line in enumerate(lines):
@@ -130,7 +136,7 @@ def main(argv=None):
     from .fetch import FetchError
     try:
         return a.fn(a)
-    except FetchError as e:
+    except (FetchError, RuntimeError) as e:
         print(f'decider-mlx: {e}', file=sys.stderr)
         return 1
     except KeyboardInterrupt:

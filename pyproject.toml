@@ -1,6 +1,6 @@
 [project]
 name = "decider-mlx"
-version = "0.1.0.dev0"
+version = "0.1.0.dev1"
 description = "MLX inference engine for Perplexity Decider v1.3 models on Apple silicon Macs"
 readme = "README.md"
 license = "Apache-2.0"

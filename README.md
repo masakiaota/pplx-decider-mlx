@@ -3,7 +3,8 @@
 English | [日本語](README.ja.md)
 
 **decider-mlx** is an [MLX](https://github.com/ml-explore/mlx)-based inference engine that runs Perplexity's
-classification models **Decider v1.3 (Flash / 27B)** locally on Apple silicon Macs (M5 or later). It provides an HTTP
+classification models **Decider v1.3 (Flash / 27B)** locally on Apple silicon Macs (M5 or later recommended; Flash also
+runs on M1-M4 via standard MLX fallback). It provides an HTTP
 server compatible with the official [Decisions API](https://docs.perplexity.ai/api-reference/decisions-post), plus
 JSONL batch processing and a Python API, so existing code can use it by pointing at your Mac.
 
@@ -41,7 +42,7 @@ Processing time of Flash under the same HTTP workload, against the official Mac 
 
 ### Requirements
 
-- **Chip**: Apple silicon **M5 or later** (M4 or earlier may work but is not supported)
+- **Chip**: Apple silicon **M5 or later** recommended (**27B** requires M5 or later; **Flash** also runs on M1-M4 via standard MLX fallback)
 - **OS**: macOS 27 or later
 - **Recommended memory**: 24 GB or more (Flash) / 36 GB or more (27B)
 - **Free disk space**: 9.6 GB or more (Flash) / 16.7 GB or more (27B)

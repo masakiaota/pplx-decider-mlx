@@ -41,7 +41,7 @@ class Bulk:
         self.S = self.N // 48 + self.N // FILLER + 2
         self.Q = max(128, -(-(self.N // 24) // 128) * 128)
         self.graphs = {}
-        self.score_domain = isinstance(engine.arith, AffineInt8)
+        self.score_domain = isinstance(engine.arith, AffineInt8) and engine.arith.use_int8
 
     # ---------- graphs ----------
     def _graph(self, domain):

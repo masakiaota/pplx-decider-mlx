@@ -99,9 +99,11 @@ class App:
     """A loaded model. decide() is thread-safe: calls are queued to the one worker thread in arrival order."""
 
     def __init__(self, model, _weights=None):
+        from .model import check_hardware
         from .registry import resolve_weights, spec
         self.spec = spec(model)
         self.model = self.spec.name
+        check_hardware(self.spec)
         self._weights = _weights or resolve_weights(self.model)   # _weights: internal (tests)
         self._jobs = queue.Queue()
         self._loaded = threading.Event()
@@ -143,18 +145,19 @@ class App:
         return self._submit(lambda: self.engine.decide_records(records))
 
     def wait_ready(self, timeout=None):
-        """Block until the startup preparation is done (for measurements; requests are served before that)."""
+        """Block until the startup preparation finishes. Returns True only when preparation succeeded."""
         if not self._ready.wait(timeout):
             return False
-        return True
+        return self.prep_error is None
 
     @property
     def ready(self):
-        return self._ready.is_set()
+        return self._ready.is_set() and self.prep_error is None
 
     def status(self):
         return dict(model=self.model, loaded=self._loaded.is_set(), ready=self.ready, prep_done=self.prep_done,
-                    prep_total=self.prep_total, load_s=self.load_s, prep_s=self.prep_s)
+                    prep_total=self.prep_total, load_s=self.load_s, prep_s=self.prep_s,
+                    prep_error=None if self.prep_error is None else f'{type(self.prep_error).__name__}: {self.prep_error}')
 
     def metrics(self):
         def memory():
@@ -211,26 +214,35 @@ class App:
         self._loaded.set()
         if self.spec.prefetch:
             threading.Thread(target=self._prefetch, daemon=True).start()
+        step_name = 'init'
         try:
             steps = self._prep_steps()
             self._notify()
             while True:
                 self._drain(GRACE_S if time.perf_counter() - self._last_served < BUSY_S else 0)
                 try:
-                    name, step = next(steps)
+                    step_name, step = next(steps)
                 except StopIteration:
                     break
                 step()
                 self.prep_done += 1
                 self._notify()
+        except FloatingPointError as e:
+            self.prep_error = e
+            log.error(
+                '%s: non-finite readout during startup (%s): %s. '
+                'Verify cached weights with `decider-mlx fetch --model %s` and check GPU compatibility.',
+                self.model, step_name, e, self.model,
+            )
         except BaseException as e:   # noqa: BLE001 - preparation is an optimization; requests still work
             self.prep_error = e
-            log.exception('%s: startup preparation failed', self.model)
-        self.prep_done = self.prep_total
-        self.prep_s = time.perf_counter() - self.started
+            log.exception('%s: startup preparation failed (%s)', self.model, step_name)
+        if self.prep_error is None:
+            self.prep_done = self.prep_total
+            self.prep_s = time.perf_counter() - self.started
+            log.info('%s: preparation done in %.1f s', self.model, self.prep_s)
         self._ready.set()
         self._notify()
-        log.info('%s: preparation done in %.1f s', self.model, self.prep_s)
         while True:
             self._serve(self._jobs.get())
 
