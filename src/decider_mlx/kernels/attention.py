@@ -24,7 +24,7 @@ _attention = mx.fast.metal_kernel(
         queries[i] = float(q[(query * H + head) * D + lane + 32 * i]);
         values[i] = 0.0f;
     }
-    float maximum = -INFINITY;
+    float maximum = -FLT_MAX;
     float denominator = 0.0f;
     for (uint interval = 0; interval < 2; ++interval) {
     for (uint token = ranges[query * 4 + interval * 2]; token < uint(ranges[query * 4 + interval * 2 + 1]); ++token) {

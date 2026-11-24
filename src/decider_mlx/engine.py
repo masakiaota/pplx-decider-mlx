@@ -11,6 +11,7 @@ The answer of a request never depends on the time it arrives or on the startup p
 from __future__ import annotations
 
 import json
+import logging
 import math
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,8 +22,10 @@ import numpy as np
 from . import registry
 from .batching.bucket import Buckets
 from .batching.bulk import Bulk
-from .model import METAL_ATTENTION_LIMIT, AffineInt8, Backbone, Layout, MappedSafetensors, W4A8, forward_core
+from .model import METAL_ATTENTION_LIMIT, AffineInt8, Backbone, Layout, MappedSafetensors, W4A8, forward_core, gpu_info, has_m5_kernels
 from .protocol import Encoder, RequestError, answer, probabilities, validate
+
+log = logging.getLogger(__name__)
 
 MAX_LENGTH = 32768        # the official DEFAULT_MAX_LENGTH: longer inputs raise LengthError, never truncated
 BULK_MIN = 64             # decide(list) with at least this many requests uses the fixed-budget packing
@@ -59,15 +62,26 @@ class Engine:
             raise ValueError(f'{spec.name}: saved temperature {self.temperature} differs from the registry')
         self.model_name = spec.name
         self.max_length = MAX_LENGTH
+        self.use_m5_kernels = has_m5_kernels()
+        if spec.arithmetic == 'w4a8-s4' and not self.use_m5_kernels:
+            device_name, arch, _ = gpu_info()
+            raise RuntimeError(
+                f'{spec.name} requires Apple silicon M5 or later (detected {device_name}, {arch}); '
+                f'its row-wise 4-bit weights require M5 Metal tensor ops. Use pplx-decider-flash-v1.3 on M1-M4 Macs.'
+            )
+        if not self.use_m5_kernels:
+            device_name, arch, _ = gpu_info()
+            log.info('%s: detected %s (%s); using standard MLX quantized matmul and SDPA fallback', spec.name, device_name, arch)
         self.loader = MappedSafetensors()
         import time
         t = time.perf_counter(); self.load_times = {}
         self.encoder = Encoder(self.directory, self.config['codes'], self.config.get('max_pixels', 1638400))
         self.load_times['tokenizer'] = time.perf_counter() - t; t = time.perf_counter()
-        self.backbone = model = Backbone(self.directory, self.loader, delta_threadgroup=spec.delta_threadgroup)
+        self.backbone = model = Backbone(self.directory, self.loader, delta_threadgroup=spec.delta_threadgroup, use_nax=self.use_m5_kernels)
         self.load_times['backbone'] = time.perf_counter() - t; t = time.perf_counter()
         if spec.arithmetic == 'affine-int8':
-            model.linear = self.arith = AffineInt8(model, self._int8_values(), spec.score_layers)
+            int8_values = self._int8_values() if self.use_m5_kernels else {}
+            model.linear = self.arith = AffineInt8(model, int8_values, spec.score_layers, use_int8=self.use_m5_kernels)
         else:
             model.linear = self.arith = W4A8(model, self._rowq4(Path(weights.rowq4)))
         self.load_times['arithmetic'] = time.perf_counter() - t
@@ -284,7 +298,7 @@ class Engine:
     def forward(self, chunks, multimodal=None, return_all=False):
         """(chunks, questions, R) readout logits, or (chunks, longest, D) hidden states with return_all."""
         arith = self.arith
-        if isinstance(arith, AffineInt8):
+        if isinstance(arith, AffineInt8) and arith.use_int8:
             flags = tuple(bool(getattr(c, 'score', False)) for c in chunks)
             if any(flags):
                 arith.score, arith.mixed, arith.lengths = flags, not all(flags), tuple(c.length for c in chunks)
